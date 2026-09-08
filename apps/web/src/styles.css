@@ -1,42 +1,5 @@
 @import 'tailwindcss';
 
-@keyframes modal-backdrop-enter {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes modal-backdrop-exit {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-@keyframes modal-content-enter {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-@keyframes modal-content-exit {
-  from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(6px) scale(0.98);
-  }
-}
-@keyframes popover-enter {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes popover-exit {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -274,7 +237,7 @@ button {
   width: 100%;
   margin-left: 0;
   margin-right: 0;
-  padding: 64px clamp(28px, 6vw, 88px) 35px;
+  padding: 24px 16px 24px 70px;
   min-height: 100vh;
 }
 .tab-page-transition {
@@ -290,11 +253,56 @@ button {
     transform: translateY(0);
   }
 }
+@keyframes modal-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-backdrop-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes modal-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes modal-content-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+@keyframes popover-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes popover-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: end;
   margin-bottom: 41px;
+}
+.calendar-page .page-header {
+  position: relative;
+}
+.calendar-view-tabs {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 .eyebrow {
   color: var(--muted);
@@ -1147,7 +1155,8 @@ footer .sync-dot {
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 24px;
-  overflow: hidden;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   box-shadow: 0 25px 80px rgba(0, 0, 0, 0.18);
   transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -1197,6 +1206,10 @@ footer .sync-dot {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
   pointer-events: none;
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.create-tabs-task-event-only .create-tabs-track,
+.create-tabs-list-only .create-tabs-track {
+  width: calc((100% - 7px) / 2);
 }
 .create-tabs-list [data-slot='tabs-trigger'] {
   position: relative;
@@ -1260,9 +1273,50 @@ footer .sync-dot {
   font-size: 12px;
   padding: 7px 9px;
 }
+.ical-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+  margin-top: 18px;
+}
+.ical-fields label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.ical-fields input:not([type='checkbox']) {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: var(--soft);
+  color: var(--foreground);
+  font-size: 13px;
+}
+.ical-fields input:not([type='checkbox']):focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.ical-fields .checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 23px;
+}
+.ical-fields input[type='checkbox'] {
+  accent-color: var(--primary);
+}
 .composer-save {
   width: 100%;
   justify-content: center;
+  margin-top: 20px;
 }
 @media (prefers-reduced-motion: reduce) {
   .modal-backdrop,
@@ -1275,6 +1329,9 @@ footer .sync-dot {
   }
 }
 @media (max-width: 680px) {
+  .ical-fields {
+    grid-template-columns: 1fr;
+  }
   .notification-popover {
     top: auto;
     left: 12px;
@@ -1316,13 +1373,18 @@ footer .sync-dot {
   }
   .main-content {
     margin-left: 0;
-    padding: 38px 20px 90px;
+    padding: 24px 16px 76px;
   }
   .page-header {
     align-items: start;
     flex-direction: column;
     gap: 18px;
     margin-bottom: 30px;
+  }
+  .calendar-view-tabs {
+    position: static;
+    align-self: center;
+    transform: none;
   }
   .header-actions {
     width: 100%;
@@ -1393,32 +1455,28 @@ footer .sync-dot {
   }
 }
 
-.calendar-scroll {
-  scrollbar-width: none;
-}
-.calendar-scroll::-webkit-scrollbar {
-  display: none;
-}
-.calendar-day-page,
-.calendar-week-page,
-.calendar-month-page {
-  scroll-snap-stop: always;
-}
-
-.calendar-scroll {
-  scrollbar-width: none;
-}
-.calendar-scroll::-webkit-scrollbar {
-  display: none;
-}
-.calendar-day-page,
-.calendar-week-page,
-.calendar-month-page {
-  scroll-snap-stop: always;
-}
+.people-page { max-width: 980px; margin: 0 auto; }
+.people-subtitle { color: var(--muted); margin: 8px 0 0; font-size: 13px; }
+.people-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: 34px; }
+.people-list { border-right: 1px solid var(--border); padding-right: 24px; }
+.person-row { width: 100%; display: flex; align-items: center; gap: 11px; text-align: left; padding: 11px; border: 0; border-radius: 9px; background: transparent; color: var(--foreground); }
+.person-row:hover, .person-row.active { background: var(--soft); }
+.person-row > span:last-child { display: flex; flex-direction: column; gap: 3px; }
+.person-row small { color: var(--muted); font-size: 11px; }
+.person-avatar { width: 32px; height: 32px; display: grid; place-items: center; color: var(--primary); background: var(--accent); border-radius: 50%; }
+.person-editor { display: flex; flex-direction: column; gap: 18px; }
+.person-editor h2 { margin: 0; font-size: 18px; }
+.person-editor label { display: flex; flex-direction: column; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.person-editor input { width: 100%; padding: 10px 11px; color: var(--foreground); background: transparent; border: 1px solid var(--border); border-radius: 8px; outline: none; }
+.person-editor input:focus { border-color: var(--primary); }
 
 @media (prefers-reduced-motion: reduce) {
   .tab-page-transition {
     animation: none;
   }
 }
+.person-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+.person-fields label { display: grid; grid-template-columns: auto 1fr; align-items: center; }
+.person-fields label input { grid-column: 1 / -1; }
+.empty-state { min-height: 180px; display: grid; place-items: center; align-content: center; gap: 8px; color: var(--muted); font-size: 13px; }
+@media (max-width: 680px) { .people-layout { grid-template-columns: 1fr; } .people-list { border-right: 0; border-bottom: 1px solid var(--border); padding: 0 0 20px; } .person-fields { grid-template-columns: 1fr; } }

@@ -108,7 +108,15 @@ export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; on
           onValueChange={(value) => setView(value as typeof view)}
           className="calendar-view-tabs"
         >
-          <TabsList>
+          <TabsList className="create-tabs-list">
+            <span
+              className="create-tabs-track"
+              style={{
+                width: 'calc((100% - 11px) / 3)',
+                transform: `translateX(calc(${view === 'day' ? 0 : view === 'week' ? 1 : 2} * (100% + 3px)))`,
+              }}
+              aria-hidden="true"
+            />
             <TabsTrigger value="day">Day</TabsTrigger>
             <TabsTrigger value="week">Week</TabsTrigger>
             <TabsTrigger value="month">Month</TabsTrigger>

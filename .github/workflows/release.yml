@@ -1,0 +1,15 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.local
+*.db
+*.db-shm
+*.db-wal
+pb_data/
+apps/server/slopstack
+apps/server/tmp/
+tmp/
+openapi/openapi.json
+apps/web/src/api/generated/
+*.tsbuildinfo

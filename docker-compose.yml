@@ -1,0 +1,13 @@
+services:
+  slopstack:
+    build: .
+    ports:
+      - "8090:8090"
+    environment:
+      SLOPSTACK_PUBLIC_URL: http://localhost:8090
+      SLOPSTACK_STORAGE_PATH: /app/pb_data
+    volumes:
+      - slopstack-data:/app/pb_data
+
+volumes:
+  slopstack-data:

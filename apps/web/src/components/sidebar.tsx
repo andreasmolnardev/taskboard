@@ -1,7 +1,13 @@
-import { CheckSquare, Home, List, Search, Settings, Bell } from 'lucide-react';
+import { Bell, CalendarDays, CheckSquare, Home, List, Search, Settings } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-type SidebarTab = 'upcoming' | 'lists' | 'search' | 'notifications' | 'settings';
+type SidebarTab =
+  | 'upcoming'
+  | 'calendar'
+  | 'lists'
+  | 'search'
+  | 'notifications'
+  | 'settings';
 
 type SidebarProps = {
   activeTab: SidebarTab;
@@ -11,6 +17,7 @@ type SidebarProps = {
 
 const items: { id: SidebarTab; label: string; icon: LucideIcon }[] = [
   { id: 'upcoming', label: 'Upcoming', icon: Home },
+  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
   { id: 'lists', label: 'Lists', icon: List },
   { id: 'search', label: 'Search', icon: Search },
   { id: 'notifications', label: 'Notifications', icon: Bell },

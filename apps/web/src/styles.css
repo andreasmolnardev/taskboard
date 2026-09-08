@@ -304,6 +304,16 @@ button {
   left: 50%;
   transform: translate(-50%, -50%);
 }
+.calendar-view-tabs .create-tabs-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(280px, calc(100vw - 32px));
+}
+.calendar-view-tabs .create-tabs-list [data-slot='tabs-trigger'] {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+}
 .eyebrow {
   color: var(--muted);
   font-size: 12px;
@@ -1385,6 +1395,9 @@ footer .sync-dot {
     position: static;
     align-self: center;
     transform: none;
+  }
+  .calendar-view-tabs .create-tabs-list {
+    width: min(280px, 100%);
   }
   .header-actions {
     width: 100%;

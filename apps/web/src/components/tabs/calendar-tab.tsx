@@ -29,6 +29,7 @@ export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; on
   const [filter, setFilter] = useState<'all' | 'task' | 'event'>('all');
   const [today] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(today);
+  const [todayVisible, setTodayVisible] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const visibleEntries = entries.filter((entry) => filter === 'all' || entry.type === filter);
@@ -61,6 +62,19 @@ export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; on
     return () => cancelAnimationFrame(frame);
   }, [view, pageRadius]);
 
+  useEffect(() => {
+    const container = scrollRef.current;
+    const todayPage = pageRefs.current[pageRadius];
+    if (!container || !todayPage) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setTodayVisible(entry.isIntersecting),
+      { root: container, threshold: 0.1 },
+    );
+    observer.observe(todayPage);
+    return () => observer.disconnect();
+  }, [view, pageRadius]);
+
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
     const container = event.currentTarget;
     const position = view === 'month'
@@ -90,19 +104,26 @@ export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; on
       <header className="page-header">
         <h1>{heading}</h1>
         <div className="header-actions">
-          <button className="button button-quiet calendar-today-button" onClick={() => {
-            setSelectedDate(today);
-            requestAnimationFrame(() => {
-              const container = scrollRef.current;
-              const page = pageRefs.current[pageRadius];
-              if (!container || !page) return;
-              if (view === 'month') {
-                container.scrollTop = page.offsetTop - (container.clientHeight - page.offsetHeight) / 2;
-              } else {
-                container.scrollLeft = page.offsetLeft - (container.clientWidth - page.offsetWidth) / 2;
-              }
-            });
-          }}>Today</button>
+          {!todayVisible && (
+            <button
+              className="button button-quiet calendar-today-button"
+              onClick={() => {
+                setSelectedDate(today);
+                requestAnimationFrame(() => {
+                  const container = scrollRef.current;
+                  const page = pageRefs.current[pageRadius];
+                  if (!container || !page) return;
+                  if (view === 'month') {
+                    container.scrollTop = page.offsetTop - (container.clientHeight - page.offsetHeight) / 2;
+                  } else {
+                    container.scrollLeft = page.offsetLeft - (container.clientWidth - page.offsetWidth) / 2;
+                  }
+                });
+              }}
+            >
+              Today
+            </button>
+          )}
           <div className="filter-wrap">
             <button
               className={`button button-quiet ${filter !== 'all' ? 'selected' : ''}`}

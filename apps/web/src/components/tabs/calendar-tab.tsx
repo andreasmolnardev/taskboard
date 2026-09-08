@@ -103,6 +103,17 @@ export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; on
     <div className="calendar-page">
       <header className="page-header">
         <h1>{heading}</h1>
+        <Tabs
+          value={view}
+          onValueChange={(value) => setView(value as typeof view)}
+          className="calendar-view-tabs"
+        >
+          <TabsList>
+            <TabsTrigger value="day">Day</TabsTrigger>
+            <TabsTrigger value="week">Week</TabsTrigger>
+            <TabsTrigger value="month">Month</TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div className="header-actions">
           {!todayVisible && (
             <button
@@ -149,13 +160,6 @@ export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; on
               </div>
             )}
           </div>
-          <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
-            <TabsList className="calendar-view-tabs">
-              <TabsTrigger value="day">Day</TabsTrigger>
-              <TabsTrigger value="week">Week</TabsTrigger>
-              <TabsTrigger value="month">Month</TabsTrigger>
-            </TabsList>
-          </Tabs>
         </div>
       </header>
       {view === 'day' && (

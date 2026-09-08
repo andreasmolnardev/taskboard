@@ -1128,3 +1128,15 @@ footer .sync-dot {
 .calendar-month-page {
   scroll-snap-stop: always;
 }
+
+.calendar-scroll {
+  scrollbar-width: none;
+}
+.calendar-scroll::-webkit-scrollbar {
+  display: none;
+}
+.calendar-day-page,
+.calendar-week-page,
+.calendar-month-page {
+  scroll-snap-stop: always;
+}

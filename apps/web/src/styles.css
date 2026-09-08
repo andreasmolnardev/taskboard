@@ -1,5 +1,42 @@
 @import 'tailwindcss';
 
+@keyframes modal-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-backdrop-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes modal-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes modal-content-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+@keyframes popover-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes popover-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -692,6 +729,7 @@ kbd {
   width: 100%;
 }
 .notification-popover {
+  animation: popover-enter 180ms ease-out both;
   position: fixed;
   z-index: 8;
   top: 50%;
@@ -703,6 +741,9 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 14px;
   box-shadow: var(--shadow);
+}
+.notification-popover.is-closing {
+  animation: popover-exit 160ms ease-in both;
 }
 .notification-popover-header {
   display: flex;
@@ -872,6 +913,7 @@ footer .sync-dot {
   margin-left: 2px;
 }
 .modal-backdrop {
+  animation: modal-backdrop-enter 220ms ease-out both;
   position: fixed;
   inset: 0;
   z-index: 10;
@@ -881,7 +923,11 @@ footer .sync-dot {
   backdrop-filter: blur(3px);
   padding: 20px;
 }
+.modal-backdrop.is-closing {
+  animation: modal-backdrop-exit 180ms ease-in both;
+}
 .composer {
+  animation: modal-content-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
   width: min(100%, 480px);
   background: var(--card);
   border: 1px solid var(--border);
@@ -890,6 +936,9 @@ footer .sync-dot {
   overflow: hidden;
   box-shadow: 0 25px 80px rgba(0, 0, 0, 0.18);
   transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.modal-backdrop.is-closing .composer {
+  animation: modal-content-exit 180ms ease-in both;
 }
 .composer-header {
   display: flex;
@@ -997,6 +1046,16 @@ footer .sync-dot {
 .composer-save {
   width: 100%;
   justify-content: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .modal-backdrop.is-closing,
+  .modal-backdrop .composer,
+  .modal-backdrop.is-closing .composer,
+  .notification-popover,
+  .notification-popover.is-closing {
+    animation-duration: 1ms;
+  }
 }
 @media (max-width: 680px) {
   .notification-popover {

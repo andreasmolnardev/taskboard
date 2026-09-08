@@ -41,14 +41,17 @@ export function CreateComposer({
     observer.observe(composerRef.current);
     return () => observer.disconnect();
   }, [open, type]);
-  if (!open) return null;
+  if (!open && !closing) return null;
   const tabs = listOnly
     ? ['list', 'calendar']
     : taskEventOnly
       ? ['task', 'event']
       : ['task', 'event', 'list', 'calendar'];
   const tabIndex = tabs.indexOf(type);
-  const close = () => setClosing(true);
+  const close = () => {
+    if (closing) return;
+    setClosing(true);
+  };
   const finishClose = (event: React.AnimationEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget && closing) {
       setClosing(false);

@@ -38,7 +38,10 @@ export function App() {
   const [taskEventOnlyComposer, setTaskEventOnlyComposer] = useState(false);
   const [, setDataVersion] = useState(0);
   const { resolvedTheme } = useTheme();
-  const closeNotifications = () => setNotificationsClosing(true);
+  const closeNotifications = () => {
+    setNotificationsClosing(false);
+    setNotificationsOpen(false);
+  };
 
   useEffect(() => {
     const tabName =
@@ -60,12 +63,12 @@ export function App() {
   }, [activeTab, notificationsOpen, pathname]);
   useEffect(() => {
     if (!notificationsOpen) return;
-    const closeOnOutsideClick = (event: MouseEvent) => {
+    const closeOnOutsidePointer = (event: PointerEvent) => {
       if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node))
         closeNotifications();
     };
-    document.addEventListener('mousedown', closeOnOutsideClick);
-    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
   }, [notificationsOpen]);
   useEffect(() => {
     const isAuthRoute = pathname.startsWith('/auth/');

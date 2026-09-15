@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 
@@ -16,28 +17,61 @@ import (
 
 const appPasswordCollection = "app_passwords"
 
+var errInvalidAppPassword = errors.New("invalid credentials")
+
+func requestClientIP(remoteAddr string) string {
+	remoteAddr = strings.TrimSpace(remoteAddr)
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		return host
+	}
+	return remoteAddr
+}
+
 // AuthenticateAppPassword checks a CalDAV username and app password. The
 // username is the user's email address, like PocketBase password auth.
-func AuthenticateAppPassword(app core.App, username, password string) (*core.Record, error) {
+//
+// The optional clientIP lets request-aware callers apply the shared IP limit
+// without breaking existing callers.
+func AuthenticateAppPassword(app core.App, username, password string, clientIP ...string) (*core.Record, error) {
+	usernameKey := appPasswordThrottleKey("username", strings.ToLower(strings.TrimSpace(username)))
+	ipKey := ""
+	if len(clientIP) > 0 {
+		ipKey = appPasswordThrottleKey("ip", strings.TrimSpace(clientIP[0]))
+	}
+	if !appPasswordLimiter.allowed(usernameKey, ipKey) {
+		return nil, errInvalidAppPassword
+	}
+
 	users, err := app.FindRecordsByFilter("users", "email = {:email}", "", 1, 0, dbx.Params{"email": username})
-	if err != nil || len(users) == 0 {
-		return nil, errors.New("invalid credentials")
+	if err != nil {
+		return nil, errInvalidAppPassword
+	}
+	if len(users) == 0 {
+		appPasswordLimiter.recordFailure(usernameKey, ipKey)
+		return nil, errInvalidAppPassword
 	}
 	user := users[0]
+	userKey := appPasswordThrottleKey("user", user.Id)
+	if !appPasswordLimiter.allowed(userKey) {
+		return nil, errInvalidAppPassword
+	}
 	if user.GetBool("disabled") {
-		return nil, errors.New("invalid credentials")
+		appPasswordLimiter.recordFailure(usernameKey, userKey, ipKey)
+		return nil, errInvalidAppPassword
 	}
 
 	passwords, err := app.FindRecordsByFilter(appPasswordCollection, "user = {:user}", "", 0, 0, dbx.Params{"user": user.Id})
 	if err != nil {
-		return nil, errors.New("invalid credentials")
+		return nil, errInvalidAppPassword
 	}
 	for _, token := range passwords {
 		if bcrypt.CompareHashAndPassword([]byte(token.GetString("secret_hash")), []byte(password)) == nil {
+			appPasswordLimiter.reset(usernameKey, userKey, ipKey)
 			return user, nil
 		}
 	}
-	return nil, errors.New("invalid credentials")
+	appPasswordLimiter.recordFailure(usernameKey, userKey, ipKey)
+	return nil, errInvalidAppPassword
 }
 
 func registerAppPasswordRoutes(e *core.ServeEvent) {

@@ -69,7 +69,7 @@ func calDAVUser(event *core.RequestEvent) (*core.Record, bool) {
 	if !found {
 		return nil, false
 	}
-	user, err := AuthenticateAppPassword(event.App, username, password)
+	user, err := AuthenticateAppPassword(event.App, username, password, requestClientIP(event.Request.RemoteAddr))
 	return user, err == nil
 }
 

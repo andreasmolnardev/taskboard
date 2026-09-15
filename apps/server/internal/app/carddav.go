@@ -47,7 +47,7 @@ func cardDAVUser(event *core.RequestEvent) (*core.Record, bool) {
 	if len(parts) != 2 {
 		return nil, false
 	}
-	user, err := AuthenticateAppPassword(event.App, parts[0], parts[1])
+	user, err := AuthenticateAppPassword(event.App, parts[0], parts[1], requestClientIP(event.Request.RemoteAddr))
 	return user, err == nil
 }
 

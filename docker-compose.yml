@@ -6,6 +6,9 @@ services:
     environment:
       SLOPSTACK_PUBLIC_URL: http://localhost:8090
       SLOPSTACK_STORAGE_PATH: /app/pb_data
+      SLOPSTACK_BACKUP_ENABLED: "true"
+      SLOPSTACK_BACKUP_CRON: "0 3 * * *"
+      SLOPSTACK_BACKUP_MAX_KEEP: "14"
     volumes:
       - slopstack-data:/app/pb_data
 

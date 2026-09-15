@@ -15,6 +15,44 @@ PocketBase data persists in the `slopstack-data` volume.
 - Set a durable `SLOPSTACK_STORAGE_PATH`.
 - Keep PocketBase data outside ephemeral container storage.
 
+## Backups
+
+Scheduled backups use PocketBase's transaction-safe backup engine. Docker enables one backup each day at 03:00 and keeps the newest 14 archives. Local archives are stored under `pb_data/backups`.
+
+Set these values to change the schedule:
+
+```sh
+SLOPSTACK_BACKUP_ENABLED=true
+SLOPSTACK_BACKUP_CRON="0 3 * * *"
+SLOPSTACK_BACKUP_MAX_KEEP=14
+```
+
+Local archives share the same storage volume as the live database. This protects against bad writes, but not disk or volume loss. Production systems should use private S3-compatible storage:
+
+```sh
+SLOPSTACK_BACKUP_S3_ENABLED=true
+SLOPSTACK_BACKUP_S3_BUCKET=taskboard-backups
+SLOPSTACK_BACKUP_S3_REGION=us-east-1
+SLOPSTACK_BACKUP_S3_ENDPOINT=https://s3.example.com
+SLOPSTACK_BACKUP_S3_ACCESS_KEY=...
+SLOPSTACK_BACKUP_S3_SECRET=...
+SLOPSTACK_BACKUP_S3_FORCE_PATH_STYLE=false
+```
+
+Use a private bucket, TLS, a dedicated least-privilege key, versioning, and server-side encryption. Keep credentials in the deployment secret store. Do not commit them.
+
+Use the server CLI for manual backup work. These commands use the configured local or S3 backup store:
+
+```sh
+slopstack backup create
+slopstack backup list
+slopstack backup restore <exact-name-from-list> --confirm
+```
+
+`backup create` prints the new archive name. `backup restore` rejects paths and other unsafe names, requires an exact archive name, and will not run without `--confirm`. Restore replaces the live PocketBase data and restarts the process. Stop traffic and other app instances first. There is no app HTTP restore endpoint.
+
+Keep at least twice the data size free during backup and restore. Restore a copy into an isolated instance first when possible. Run a restore drill after setup and at least monthly. A backup is not proven until restore succeeds.
+
 ## Frontend
 
 The frontend is a static Vite build. Keep `/api` proxied to the Go runtime or set `VITE_API_URL` to the deployed API origin.

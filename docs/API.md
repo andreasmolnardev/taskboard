@@ -20,6 +20,14 @@ Authorization: Bearer <pocketbase-token>
 
 Unauthenticated requests return `401`.
 
+## Calendar import and export
+
+`POST /api/calendars/import` accepts multipart form data with `calendar`, optional `list`, and `file` fields. The target calendar and list must belong to the signed-in user. VEVENT components use `calendar`; VTODO components use `list`. The import accepts files up to 10 MiB and updates existing components with the same owner, type, and UID instead of creating duplicates.
+
+`GET /api/calendars/{id}/export.ics` downloads the signed-in user's calendar as an RFC 5545 iCalendar file.
+
+Both endpoints require a PocketBase bearer token.
+
 ## Extending a module
 
 1. Define request and response types in the Go module.

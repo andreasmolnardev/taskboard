@@ -28,6 +28,7 @@ func main() {
 	api := newOpenAPI(config)
 	app.Register(pb, config, api)
 	registerExportCommand(pb, api)
+	pb.RootCmd.AddCommand(app.NewBackupCommand(pb).Command())
 
 	if err := pb.Start(); err != nil {
 		slog.Error("server stopped", "error", err)

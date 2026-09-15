@@ -3,7 +3,7 @@ import { Plus, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
-import { entries, lists, type Entry } from '../../data';
+import { entries, getActiveContainers, lists, type Entry } from '../../data';
 import { CreateFields } from '../create-fields';
 import { localToRecord, recordToLocal } from './create-composer.helpers';
 
@@ -103,7 +103,7 @@ export function CreateComposer({
     setClosing(false);
     const fields = (editing?.fields ?? {}) as Form;
     const entryType = editing?.type ?? type;
-    const defaultContainer = lists.find(
+    const defaultContainer = getActiveContainers(lists).find(
       (container) => container.kind === (entryType === 'task' ? 'list' : 'calendar'),
     );
     setForm({
@@ -358,7 +358,7 @@ export function CreateComposer({
           value={String(form[entryType === 'task' ? 'list' : 'calendar'] ?? '')}
           onChange={(event) => set(entryType === 'task' ? 'list' : 'calendar', event.target.value)}
         >
-          {lists
+          {getActiveContainers(lists)
             .filter((container) => container.kind === (entryType === 'task' ? 'list' : 'calendar'))
             .map((container) => (
               <option key={container.id} value={container.id}>

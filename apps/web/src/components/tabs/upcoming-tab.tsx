@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, Filter, Plus } from 'lucide-react';
-import { entries, formatDate, lists, type Entry } from '../../data';
+import { entries, formatDate, getActiveContainers, lists, type Entry } from '../../data';
 import { CalendarMonth } from '../calendar-month';
 import { EntryRow } from '../entry-row';
 
@@ -62,7 +62,7 @@ export function UpcomingTab({
         <CalendarMonth year={now.getFullYear()} month={now.getMonth() + 1} />
       </section>
       <div className="list-legend">
-        {lists.map((list) => (
+        {getActiveContainers(lists).map((list) => (
           <span key={list.name}>
             <i style={{ background: list.color }} />
             {list.name}

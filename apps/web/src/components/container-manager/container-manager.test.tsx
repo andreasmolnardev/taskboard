@@ -17,6 +17,7 @@ const containers: ManagedContainer[] = [
     kind: 'list',
     count: 0,
     visible: true,
+    archived: false,
   },
   {
     id: 'work',
@@ -26,6 +27,17 @@ const containers: ManagedContainer[] = [
     kind: 'calendar',
     count: 4,
     visible: false,
+    archived: false,
+  },
+  {
+    id: 'old',
+    name: 'Old calendar',
+    color: '#7657a8',
+    description: 'Archived events',
+    kind: 'calendar',
+    count: 2,
+    visible: false,
+    archived: true,
   },
 ];
 
@@ -37,6 +49,7 @@ describe('ContainerManager', () => {
         defaultSelectedId="work"
         onUpdate={vi.fn()}
         onVisibilityChange={vi.fn()}
+        onArchiveChange={vi.fn()}
         onRemove={vi.fn()}
       />,
     );
@@ -46,6 +59,8 @@ describe('ContainerManager', () => {
     expect(html).toContain('aria-label="Select calendar Work"');
     expect(html).toContain('aria-label="Edit Personal"');
     expect(html).toContain('aria-label="Remove Work"');
+    expect(html).toContain('aria-label="Unarchive Old calendar"');
+    expect(html).toContain('Archived');
     expect(html).toContain('aria-label="Show Personal"');
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('Team events');
@@ -68,6 +83,7 @@ describe('ContainerManager', () => {
         containers={[]}
         onUpdate={vi.fn()}
         onVisibilityChange={vi.fn()}
+        onArchiveChange={vi.fn()}
         onRemove={vi.fn()}
       />,
     );

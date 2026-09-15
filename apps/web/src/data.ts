@@ -37,9 +37,16 @@ export type EntryContainer = {
   count: number;
   description: string;
   kind: 'list' | 'calendar';
+  archived: boolean;
 };
 
 export const lists: EntryContainer[] = [];
+
+export function getActiveContainers<T extends Pick<EntryContainer, 'archived'>>(
+  containers: readonly T[],
+): T[] {
+  return containers.filter((container) => !container.archived);
+}
 
 export type WeekStart = 'sunday' | 'monday';
 export const weekStartStorageKey = 'taskboard-week-start';

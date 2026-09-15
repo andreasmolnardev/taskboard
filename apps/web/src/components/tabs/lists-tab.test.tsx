@@ -24,6 +24,7 @@ describe('ListsTab', () => {
         count: 2,
         description: 'Things to do',
         kind: 'list',
+        archived: false,
       },
       {
         id: 'events',
@@ -32,6 +33,16 @@ describe('ListsTab', () => {
         count: 3,
         description: 'Places to be',
         kind: 'calendar',
+        archived: false,
+      },
+      {
+        id: 'old-tasks',
+        name: 'Archived tasks',
+        color: '#7657a8',
+        count: 1,
+        description: 'Old tasks',
+        kind: 'list',
+        archived: true,
       },
     );
 
@@ -43,5 +54,6 @@ describe('ListsTab', () => {
     expect(html).toContain('Things to do');
     expect(html).not.toContain('Work calendar');
     expect(html).not.toContain('Places to be');
+    expect(html).not.toContain('Archived tasks');
   });
 });

@@ -8,6 +8,7 @@ import { ContainerManager, type ManagedContainer } from '../container-manager';
 import {
   accentColors,
   fontSizes,
+  getActiveContainers,
   getWeekStart,
   lists,
   weekStartStorageKey,
@@ -115,7 +116,8 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
-    const calendar = lists.find((container) => container.kind === 'calendar');
+    const activeContainers = getActiveContainers(lists);
+    const calendar = activeContainers.find((container) => container.kind === 'calendar');
     event.target.value = '';
     if (!calendar || files.length === 0) return;
     setCalendarIOBusy(true);
@@ -125,7 +127,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       for (const file of files) {
         const form = new FormData();
         form.append('calendar', calendar.id);
-        const list = lists.find((container) => container.kind === 'list');
+        const list = activeContainers.find((container) => container.kind === 'list');
         if (list) form.append('list', list.id);
         form.append('file', file);
         const response = await apiFetch('/api/calendars/import', {
@@ -167,13 +169,20 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     localStorage.setItem(visibilityStorageKey, JSON.stringify(next));
     onChanged?.();
   };
+  const setContainerArchived = async (container: ManagedContainer, archived: boolean) => {
+    await pb
+      .collection(container.kind === 'list' ? 'lists' : 'calendars')
+      .update(container.id, { archived });
+    const next = archived
+      ? [...new Set([...hiddenContainerIds, container.id])]
+      : hiddenContainerIds.filter((id) => id !== container.id);
+    setHiddenContainerIds(next);
+    localStorage.setItem(visibilityStorageKey, JSON.stringify(next));
+    onChanged?.();
+  };
   const removeContainer = async (container: ManagedContainer, action: 'delete' | 'archive') => {
     if (action === 'archive') {
-      await pb
-        .collection(container.kind === 'list' ? 'lists' : 'calendars')
-        .update(container.id, { archived: true });
-      setContainerVisible(container, false);
-      onChanged?.();
+      await setContainerArchived(container, true);
       return;
     }
     await pb.collection(container.kind === 'list' ? 'lists' : 'calendars').delete(container.id);
@@ -354,6 +363,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 containers={managedContainers}
                 onUpdate={updateContainer}
                 onVisibilityChange={setContainerVisible}
+                onArchiveChange={setContainerArchived}
                 onRemove={removeContainer}
               />
             </div>
@@ -384,7 +394,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                     disabled={calendarIOBusy}
                   />
                 </label>
-                {lists
+                {getActiveContainers(lists)
                   .filter((container) => container.kind === 'calendar')
                   .map((calendar) => (
                     <button

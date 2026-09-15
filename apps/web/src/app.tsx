@@ -5,7 +5,7 @@ import { useTheme } from 'next-themes';
 import { Sidebar, type SidebarTab } from './components/sidebar';
 import { apiFetch } from './api/client';
 import { pb } from './api/pocketbase';
-import { accentColors, entries, fontSizes, lists, type Entry } from './data';
+import { accentColors, entries, fontSizes, getActiveContainers, lists, type Entry } from './data';
 import { CalendarTab } from './components/tabs/calendar-tab';
 import { ListsTab } from './components/tabs/lists-tab';
 import { SearchTab } from './components/tabs/search-tab';
@@ -130,12 +130,11 @@ export function App() {
     setDataError('');
     const loadEntries = async () => {
       const filter = `owner = "${userId}"`;
-      const activeContainerFilter = `${filter} && archived = false`;
       const [tasks, events, taskLists, calendars] = await Promise.all([
         pb.collection('todos').getFullList({ filter, sort: 'due_date' }),
         pb.collection('events').getFullList({ filter, sort: 'start_date' }),
-        pb.collection('lists').getFullList({ filter: activeContainerFilter, sort: 'name' }),
-        pb.collection('calendars').getFullList({ filter: activeContainerFilter, sort: 'name' }),
+        pb.collection('lists').getFullList({ filter, sort: 'name' }),
+        pb.collection('calendars').getFullList({ filter, sort: 'name' }),
       ]);
       const containers = [
         ...taskLists.map((record) => ({
@@ -144,6 +143,7 @@ export function App() {
           color: String(record.color),
           description: String(record.description ?? ''),
           kind: 'list' as const,
+          archived: Boolean(record.archived),
         })),
         ...calendars.map((record) => ({
           id: record.id,
@@ -151,6 +151,7 @@ export function App() {
           color: String(record.color),
           description: String(record.description ?? ''),
           kind: 'calendar' as const,
+          archived: Boolean(record.archived),
         })),
       ];
       const containerById = new Map(containers.map((container) => [container.id, container]));
@@ -258,10 +259,17 @@ export function App() {
         ...recurringFallbacks,
       ];
       if (!isCurrent()) return;
+      const activeContainerIds = new Set(
+        getActiveContainers(containers).map((container) => container.id),
+      );
       entries.splice(
         0,
         entries.length,
-        ...loadedEntries.filter((entry) => !hiddenContainerIds.includes(entry.containerId)),
+        ...loadedEntries.filter(
+          (entry) =>
+            activeContainerIds.has(entry.containerId) &&
+            !hiddenContainerIds.includes(entry.containerId),
+        ),
       );
       lists.splice(
         0,
@@ -272,6 +280,7 @@ export function App() {
           color: String(container.color || '#3b6ea8'),
           description: String(container.description || ''),
           kind: container.kind,
+          archived: container.archived,
           count: loadedEntries.filter((entry) => entry.containerId === container.id).length,
         })),
       );

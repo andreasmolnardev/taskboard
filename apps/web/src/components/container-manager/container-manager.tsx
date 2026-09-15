@@ -1,5 +1,15 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
-import { Archive, CalendarDays, Eye, EyeOff, ListTodo, Pencil, Trash2, X } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  CalendarDays,
+  Eye,
+  EyeOff,
+  ListTodo,
+  Pencil,
+  Trash2,
+  X,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +25,7 @@ export type ManagedContainer = {
   kind: 'list' | 'calendar';
   count: number;
   visible: boolean;
+  archived: boolean;
 };
 
 export type ContainerChanges = Pick<ManagedContainer, 'name' | 'color' | 'description'>;
@@ -26,6 +37,7 @@ export type ContainerManagerProps = {
   onSelect?: (container: ManagedContainer) => void;
   onUpdate: (container: ManagedContainer, changes: ContainerChanges) => void | Promise<void>;
   onVisibilityChange: (container: ManagedContainer, visible: boolean) => void | Promise<void>;
+  onArchiveChange: (container: ManagedContainer, archived: boolean) => void | Promise<void>;
   onRemove: (container: ManagedContainer, action: RemovalAction) => void | Promise<void>;
 };
 
@@ -46,6 +58,7 @@ export function ContainerManager({
   onSelect,
   onUpdate,
   onVisibilityChange,
+  onArchiveChange,
   onRemove,
 }: ContainerManagerProps) {
   const initialId = resolveDefaultSelection(containers, defaultSelectedId);
@@ -54,6 +67,7 @@ export function ContainerManager({
   const [removeId, setRemoveId] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [archivingId, setArchivingId] = useState<string>();
   const [error, setError] = useState('');
   const nameId = useId();
   const colorId = useId();
@@ -105,6 +119,18 @@ export function ContainerManager({
       await onVisibilityChange(container, visible);
     } catch {
       setError(`Could not change the visibility of ${container.name}.`);
+    }
+  }
+
+  async function changeArchived(container: ManagedContainer, archived: boolean) {
+    setArchivingId(container.id);
+    setError('');
+    try {
+      await onArchiveChange(container, archived);
+    } catch {
+      setError(`Could not ${archived ? 'archive' : 'unarchive'} ${container.name}.`);
+    } finally {
+      setArchivingId(undefined);
     }
   }
 
@@ -170,6 +196,11 @@ export function ContainerManager({
                       {container.description ||
                         `No description · ${container.count} ${container.count === 1 ? 'item' : 'items'}`}
                     </span>
+                    {container.archived && (
+                      <span className="block text-xs font-medium text-muted-foreground">
+                        Archived
+                      </span>
+                    )}
                   </span>
                 </button>
 
@@ -186,6 +217,7 @@ export function ContainerManager({
                     id={`visibility-${container.id}`}
                     checked={container.visible}
                     aria-label={`Show ${container.name}`}
+                    disabled={container.archived}
                     onCheckedChange={(visible) => void changeVisibility(container, visible)}
                   />
                 </div>
@@ -200,15 +232,28 @@ export function ContainerManager({
                   >
                     <Pencil />
                   </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Remove ${container.name}`}
-                    onClick={() => setRemoveId(container.id)}
-                  >
-                    <Trash2 />
-                  </Button>
+                  {container.archived ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Unarchive ${container.name}`}
+                      onClick={() => void changeArchived(container, false)}
+                      disabled={archivingId === container.id}
+                    >
+                      <ArchiveRestore />
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Remove ${container.name}`}
+                      onClick={() => setRemoveId(container.id)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  )}
                 </div>
               </article>
             );

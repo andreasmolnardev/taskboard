@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { formatDate, formatDateKey, getWeekStart, weekStartStorageKey } from './data';
+import {
+  formatDate,
+  formatDateKey,
+  getActiveContainers,
+  getWeekStart,
+  weekStartStorageKey,
+} from './data';
 
 describe('date helpers', () => {
   afterEach(() => {
@@ -21,6 +27,15 @@ describe('date helpers', () => {
 
   it('formats stored date-only values without shifting the day', () => {
     expect(formatDate('2024-02-29')).toBe('Thursday, February 29');
+  });
+});
+
+describe('getActiveContainers', () => {
+  it('keeps archived containers out of active views', () => {
+    const active = { id: 'active', archived: false };
+    const archived = { id: 'archived', archived: true };
+
+    expect(getActiveContainers([active, archived])).toEqual([active]);
   });
 });
 

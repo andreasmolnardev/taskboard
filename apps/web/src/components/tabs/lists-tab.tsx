@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MoreHorizontal, Plus } from 'lucide-react';
-import { entries, lists, type Entry } from '../../data';
+import { entries, getActiveContainers, lists, type Entry } from '../../data';
 import { EntryRow } from '../entry-row';
 
 export function ListsTab({
@@ -12,7 +12,7 @@ export function ListsTab({
   onEdit: (entry: Entry) => void;
   onChanged: () => void;
 }) {
-  const taskLists = lists.filter((list) => list.kind === 'list');
+  const taskLists = getActiveContainers(lists).filter((list) => list.kind === 'list');
   const [selected, setSelected] = useState('');
   useEffect(() => {
     if (!taskLists.some((list) => list.id === selected)) setSelected(taskLists[0]?.id ?? '');

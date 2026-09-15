@@ -10,12 +10,7 @@ const queryClient = new QueryClient();
 
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="light"
-      enableSystem={false}
-      themes={['light', 'dark']}
-    >
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem themes={['light', 'dark']}>
       <TooltipProvider>
         <RouterProvider router={router} />
       </TooltipProvider>

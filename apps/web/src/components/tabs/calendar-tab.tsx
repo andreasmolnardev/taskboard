@@ -3,8 +3,9 @@ import { ChevronDown, Filter } from 'lucide-react';
 
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { entries, formatDate, formatDateKey, getWeekStart, type Entry } from '../../data';
-import { EntryRow } from '../entry-row';
+
 import { FullMonthCalendar } from '../full-month-calendar';
+import { TimeGrid, type TimeGridEvent } from '../time-grid';
 
 function getWeekNumber(date: Date) {
   const thursday = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -23,7 +24,33 @@ function addMonths(date: Date, amount: number) {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1);
 }
 
-export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; onEdit: (entry: Entry) => void }) {
+function entryToTimeGrid(entry: Entry): TimeGridEvent {
+  const allDay = entry.type === 'task' || Boolean(entry.fields?.all_day);
+  const start = allDay
+    ? new Date(`${entry.date}T00:00:00`)
+    : new Date(String(entry.fields?.start_date ?? `${entry.date}T${entry.time ?? '00:00'}:00`));
+  const storedEnd = entry.fields?.end_date;
+  const end = storedEnd
+    ? new Date(String(storedEnd))
+    : new Date(start.getTime() + (allDay ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000));
+  return {
+    id: entry.id,
+    title: entry.title,
+    description: entry.description,
+    color: entry.color,
+    start,
+    end,
+    allDay,
+  };
+}
+
+export function CalendarTab({
+  onDayClick,
+  onEdit,
+}: {
+  onDayClick: () => void;
+  onEdit: (entry: Entry) => void;
+}) {
   const [view, setView] = useState<'day' | 'week' | 'month'>('month');
   const [filterOpen, setFilterOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'task' | 'event'>('all');
@@ -34,17 +61,28 @@ export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; on
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const visibleEntries = entries.filter((entry) => filter === 'all' || entry.type === filter);
   const selectedKey = formatDateKey(selectedDate);
+  const entriesForDay = (date: Date) => {
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dayEnd = addDays(dayStart, 1);
+    return visibleEntries.filter((entry) => {
+      const event = entryToTimeGrid(entry);
+      return event.end > dayStart && event.start < dayEnd;
+    });
+  };
 
   const weekStartsOn = getWeekStart() === 'monday' ? 1 : 0;
   const todayWeekStart = new Date(today);
   todayWeekStart.setDate(today.getDate() - ((today.getDay() - weekStartsOn + 7) % 7));
   const selectedWeekStart = new Date(selectedDate);
-  selectedWeekStart.setDate(selectedDate.getDate() - ((selectedDate.getDay() - weekStartsOn + 7) % 7));
-  const heading = view === 'day'
-    ? formatDate(selectedKey)
-    : view === 'week'
-      ? `Week ${getWeekNumber(selectedWeekStart)}`
-      : selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  selectedWeekStart.setDate(
+    selectedDate.getDate() - ((selectedDate.getDay() - weekStartsOn + 7) % 7),
+  );
+  const heading =
+    view === 'day'
+      ? formatDate(selectedKey)
+      : view === 'week'
+        ? `Week ${getWeekNumber(selectedWeekStart)}`
+        : selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const pageRadius = view === 'day' ? 14 : 6;
   const pageCount = pageRadius * 2 + 1;
 
@@ -67,35 +105,41 @@ export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; on
     const todayPage = pageRefs.current[pageRadius];
     if (!container || !todayPage) return;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => setTodayVisible(entry.isIntersecting),
-      { root: container, threshold: 0.1 },
-    );
+    const observer = new IntersectionObserver(([entry]) => setTodayVisible(entry.isIntersecting), {
+      root: container,
+      threshold: 0.1,
+    });
     observer.observe(todayPage);
     return () => observer.disconnect();
   }, [view, pageRadius]);
 
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
     const container = event.currentTarget;
-    const position = view === 'month'
-      ? container.scrollTop + container.clientHeight / 2
-      : container.scrollLeft + container.clientWidth / 2;
+    const position =
+      view === 'month'
+        ? container.scrollTop + container.clientHeight / 2
+        : container.scrollLeft + container.clientWidth / 2;
     const pages = Array.from(container.children) as HTMLDivElement[];
     const index = pages.reduce((closest, page, pageIndex) => {
-      const pageCenter = view === 'month'
-        ? page.offsetTop + page.offsetHeight / 2
-        : page.offsetLeft + page.offsetWidth / 2;
-      const closestCenter = view === 'month'
-        ? pages[closest].offsetTop + pages[closest].offsetHeight / 2
-        : pages[closest].offsetLeft + pages[closest].offsetWidth / 2;
-      return Math.abs(pageCenter - position) < Math.abs(closestCenter - position) ? pageIndex : closest;
+      const pageCenter =
+        view === 'month'
+          ? page.offsetTop + page.offsetHeight / 2
+          : page.offsetLeft + page.offsetWidth / 2;
+      const closestCenter =
+        view === 'month'
+          ? pages[closest].offsetTop + pages[closest].offsetHeight / 2
+          : pages[closest].offsetLeft + pages[closest].offsetWidth / 2;
+      return Math.abs(pageCenter - position) < Math.abs(closestCenter - position)
+        ? pageIndex
+        : closest;
     }, 0);
     const offset = index - pageRadius;
-    const nextDate = view === 'month'
-      ? addMonths(today, offset)
-      : view === 'week'
-        ? addDays(todayWeekStart, offset * 7)
-        : addDays(today, offset);
+    const nextDate =
+      view === 'month'
+        ? addMonths(today, offset)
+        : view === 'week'
+          ? addDays(todayWeekStart, offset * 7)
+          : addDays(today, offset);
     setSelectedDate(nextDate);
   };
 
@@ -133,9 +177,11 @@ export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; on
                   const page = pageRefs.current[pageRadius];
                   if (!container || !page) return;
                   if (view === 'month') {
-                    container.scrollTop = page.offsetTop - (container.clientHeight - page.offsetHeight) / 2;
+                    container.scrollTop =
+                      page.offsetTop - (container.clientHeight - page.offsetHeight) / 2;
                   } else {
-                    container.scrollLeft = page.offsetLeft - (container.clientWidth - page.offsetWidth) / 2;
+                    container.scrollLeft =
+                      page.offsetLeft - (container.clientWidth - page.offsetWidth) / 2;
                   }
                 });
               }}
@@ -171,19 +217,43 @@ export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; on
         </div>
       </header>
       {view === 'day' && (
-        <section className="calendar-scroll calendar-day-scroll" onScroll={handleScroll} ref={scrollRef}>
+        <section
+          className="calendar-scroll calendar-day-scroll"
+          onScroll={handleScroll}
+          ref={scrollRef}
+        >
           {Array.from({ length: pageCount }, (_, index) => {
             const date = addDays(today, index - pageRadius);
             const dateKey = formatDateKey(date);
-            const dateEntries = visibleEntries.filter((entry) => entry.date === dateKey);
+            const dateEntries = entriesForDay(date);
             return (
               <div
                 className="calendar-day-page calendar-view-panel"
                 key={dateKey}
-                ref={(element) => { pageRefs.current[index] = element; }}
+                ref={(element) => {
+                  pageRefs.current[index] = element;
+                }}
               >
                 {dateEntries.length > 0 ? (
-                  dateEntries.map((entry) => <EntryRow entry={entry} key={entry.id} onEdit={onEdit} />)
+                  <TimeGrid
+                    className="calendar-day-time-grid"
+                    rangeStart={new Date(date.getFullYear(), date.getMonth(), date.getDate())}
+                    rangeEnd={addDays(
+                      new Date(date.getFullYear(), date.getMonth(), date.getDate()),
+                      1,
+                    )}
+                    events={dateEntries.map(entryToTimeGrid)}
+                    now={new Date()}
+                    startHour={6}
+                    pixelsPerMinute={0.75}
+                    renderEvent={(event: TimeGridEvent) => (
+                      <button
+                        onClick={() => onEdit(dateEntries.find((entry) => entry.id === event.id)!)}
+                      >
+                        {event.title}
+                      </button>
+                    )}
+                  />
                 ) : (
                   <p className="calendar-view-empty">No entries for this day.</p>
                 )}
@@ -193,45 +263,58 @@ export function CalendarTab({ onDayClick, onEdit }: { onDayClick: () => void; on
         </section>
       )}
       {view === 'week' && (
-        <section className="calendar-scroll calendar-week-scroll" onScroll={handleScroll} ref={scrollRef}>
+        <section
+          className="calendar-scroll calendar-week-scroll"
+          onScroll={handleScroll}
+          ref={scrollRef}
+        >
           {Array.from({ length: pageCount }, (_, index) => {
             const pageWeekStart = addDays(todayWeekStart, (index - pageRadius) * 7);
-            const weekDays = Array.from({ length: 7 }, (_, dayIndex) => addDays(pageWeekStart, dayIndex));
+
             return (
               <div
                 className="calendar-week-page calendar-week-view"
                 key={formatDateKey(pageWeekStart)}
-                ref={(element) => { pageRefs.current[index] = element; }}
+                ref={(element) => {
+                  pageRefs.current[index] = element;
+                }}
               >
-                {weekDays.map((date) => {
-                  const dateKey = formatDateKey(date);
-                  const dateEntries = visibleEntries.filter((entry) => entry.date === dateKey);
-                  return (
-                    <div className="calendar-week-day" key={dateKey}>
-                      <strong>{date.toLocaleDateString('en-US', { weekday: 'short' })}</strong>
-                      <span>{date.getDate()}</span>
-                      {dateEntries.map((entry) => (
-                        <small key={entry.id} style={{ borderLeftColor: entry.color }}>
-                          {entry.title}
-                        </small>
-                      ))}
-                    </div>
-                  );
-                })}
+                <TimeGrid
+                  className="calendar-week-time-grid"
+                  rangeStart={pageWeekStart}
+                  rangeEnd={addDays(pageWeekStart, 7)}
+                  events={visibleEntries.map(entryToTimeGrid)}
+                  now={new Date()}
+                  startHour={6}
+                  pixelsPerMinute={0.6}
+                  renderEvent={(event: TimeGridEvent) => (
+                    <button
+                      onClick={() => onEdit(visibleEntries.find((entry) => entry.id === event.id)!)}
+                    >
+                      {event.title}
+                    </button>
+                  )}
+                />
               </div>
             );
           })}
         </section>
       )}
       {view === 'month' && (
-        <section className="calendar-scroll calendar-month-scroll" onScroll={handleScroll} ref={scrollRef}>
+        <section
+          className="calendar-scroll calendar-month-scroll"
+          onScroll={handleScroll}
+          ref={scrollRef}
+        >
           {Array.from({ length: pageCount }, (_, index) => {
             const month = addMonths(today, index - pageRadius);
             return (
               <div
                 className="calendar-month-page calendar-view-month"
                 key={`${month.getFullYear()}-${month.getMonth()}`}
-                ref={(element) => { pageRefs.current[index] = element; }}
+                ref={(element) => {
+                  pageRefs.current[index] = element;
+                }}
               >
                 <FullMonthCalendar
                   year={month.getFullYear()}

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Check } from 'lucide-react';
+import { apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
 
 export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
@@ -14,7 +15,7 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
   );
   useEffect(() => {
     if (mode !== 'register') return;
-    void fetch('/api/auth/registration-policy')
+    void apiFetch('/api/auth/registration-policy')
       .then((response) => response.json())
       .then((policy: { mode: 'disabled' | 'approval' | 'otp' }) => setRegistrationMode(policy.mode))
       .catch(() => setError('Could not load registration settings.'));

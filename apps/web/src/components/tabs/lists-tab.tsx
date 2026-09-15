@@ -1,17 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MoreHorizontal, Plus } from 'lucide-react';
-import { entries, lists } from '../../data';
+import { entries, lists, type Entry } from '../../data';
 import { EntryRow } from '../entry-row';
 
-export function ListsTab({ onAdd }: { onAdd: () => void }) {
-  const [selected, setSelected] = useState('Work');
-  const current = lists.find((list) => list.name === selected) ?? {
+export function ListsTab({
+  onAdd,
+  onEdit,
+  onChanged,
+}: {
+  onAdd: () => void;
+  onEdit: (entry: Entry) => void;
+  onChanged: () => void;
+}) {
+  const taskLists = lists.filter((list) => list.kind === 'list');
+  const [selected, setSelected] = useState('');
+  useEffect(() => {
+    if (!taskLists.some((list) => list.id === selected)) setSelected(taskLists[0]?.id ?? '');
+  }, [selected, taskLists]);
+  const current = taskLists.find((list) => list.id === selected) ?? {
     name: 'No lists yet',
     color: 'var(--muted)',
     count: 0,
     description: 'Create a list to organize your entries',
   };
-  const listEntries = entries.filter((entry) => entry.list === selected);
+  const listEntries = entries.filter((entry) => entry.containerId === selected);
   return (
     <>
       <header className="page-header">
@@ -22,11 +34,11 @@ export function ListsTab({ onAdd }: { onAdd: () => void }) {
       </header>
       <div className="lists-layout">
         <div className="list-picker">
-          {lists.map((list) => (
+          {taskLists.map((list) => (
             <button
-              className={`list-picker-item ${selected === list.name ? 'active' : ''}`}
-              onClick={() => setSelected(list.name)}
-              key={list.name}
+              className={`list-picker-item ${selected === list.id ? 'active' : ''}`}
+              onClick={() => setSelected(list.id)}
+              key={list.id}
             >
               <i style={{ background: list.color }} />
               <span>
@@ -51,7 +63,7 @@ export function ListsTab({ onAdd }: { onAdd: () => void }) {
             </button>
           </div>
           {listEntries.map((entry) => (
-            <EntryRow entry={entry} key={entry.id} />
+            <EntryRow entry={entry} key={entry.id} onEdit={onEdit} onChanged={onChanged} />
           ))}
         </section>
       </div>

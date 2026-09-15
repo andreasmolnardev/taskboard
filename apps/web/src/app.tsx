@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
+import type { RecordModel } from 'pocketbase';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useTheme } from 'next-themes';
 import { Sidebar, type SidebarTab } from './components/sidebar';
+import { apiFetch } from './api/client';
 import { pb } from './api/pocketbase';
-import { accentColors, entries, fontSizes } from './data';
+import { accentColors, entries, fontSizes, lists, type Entry } from './data';
 import { CalendarTab } from './components/tabs/calendar-tab';
 import { ListsTab } from './components/tabs/lists-tab';
 import { SearchTab } from './components/tabs/search-tab';
 import { SettingsTab } from './components/tabs/settings-tab';
 import { UpcomingTab } from './components/tabs/upcoming-tab';
+import { PeopleTab } from './components/tabs/people-tab';
 import { AuthScreen } from './components/app/auth-screen';
 import { CreateComposer } from './components/app/create-composer';
 import { NotificationsPopover } from './components/app/notifications-popover';
 
 export function App() {
   const [authenticated, setAuthenticated] = useState(pb.authStore.isValid);
+  const [authUserId, setAuthUserId] = useState(pb.authStore.record?.id ?? '');
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const activeTab: SidebarTab =
@@ -22,21 +26,29 @@ export function App() {
       ? 'calendar'
       : pathname === '/lists'
         ? 'lists'
-        : pathname === '/search'
-          ? 'search'
-          : pathname === '/settings'
-            ? 'settings'
-            : 'upcoming';
+        : pathname === '/people'
+          ? 'people'
+          : pathname === '/search'
+            ? 'search'
+            : pathname === '/settings'
+              ? 'settings'
+              : 'upcoming';
   const [composerOpen, setComposerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationsClosing, setNotificationsClosing] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const [createType, setCreateType] = useState('task');
   const [createColor, setCreateColor] = useState(accentColors[0].value);
   const [listOnlyComposer, setListOnlyComposer] = useState(false);
   const [taskEventOnlyComposer, setTaskEventOnlyComposer] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<import('./data').Entry | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [dataError, setDataError] = useState('');
   const [, setDataVersion] = useState(0);
+  const loadVersion = useRef(0);
+  const knownUserId = useRef(pb.authStore.record?.id ?? '');
   const { resolvedTheme } = useTheme();
   const closeNotifications = () => {
     setNotificationsClosing(false);
@@ -55,6 +67,7 @@ export function App() {
                 upcoming: 'Upcoming',
                 calendar: 'Calendar',
                 lists: 'Lists',
+                people: 'People',
                 search: 'Search',
                 notifications: 'Notifications',
                 settings: 'Settings',
@@ -75,45 +88,219 @@ export function App() {
     if (!authenticated && !isAuthRoute) void navigate({ to: '/auth/login', replace: true });
     if (authenticated && isAuthRoute) void navigate({ to: '/', replace: true });
   }, [authenticated, navigate, pathname]);
-  useEffect(() => pb.authStore.onChange((_token, record) => setAuthenticated(Boolean(record))), []);
   useEffect(() => {
-    if (!authenticated || !pb.authStore.record) return;
-    const userId = pb.authStore.record.id;
+    return pb.authStore.onChange((_token, record) => {
+      const nextUserId = record?.id ?? '';
+      const userChanged = nextUserId !== knownUserId.current;
+      knownUserId.current = nextUserId;
+      if (userChanged) {
+        loadVersion.current += 1;
+        entries.splice(0, entries.length);
+        lists.splice(0, lists.length);
+        setDataVersion((version) => version + 1);
+        setNotificationCount(0);
+        setDataError('');
+        setComposerOpen(false);
+        setEditingEntry(null);
+        setListOnlyComposer(false);
+        setTaskEventOnlyComposer(false);
+        setAuthUserId(nextUserId);
+      }
+      setAuthenticated(Boolean(record));
+    });
+  }, []);
+  useEffect(() => {
+    if (!authenticated || !authUserId) return;
+    const userId = authUserId;
     const storedSize = localStorage.getItem(`taskboard-font-size-${userId}`);
     const selectedSize = fontSizes.find((option) => option.value === storedSize);
-    document.documentElement.style.setProperty('--app-font-size', selectedSize?.size ?? fontSizes[1].size);
-  }, [authenticated]);
+    document.documentElement.style.setProperty(
+      '--app-font-size',
+      selectedSize?.size ?? fontSizes[1].size,
+    );
+  }, [authenticated, authUserId]);
   useEffect(() => {
-    if (!authenticated || !pb.authStore.record) return;
+    if (!authenticated || !authUserId) return;
+    const userId = authUserId;
+    const version = ++loadVersion.current;
+    const isCurrent = () => version === loadVersion.current && pb.authStore.record?.id === userId;
+    entries.splice(0, entries.length);
+    lists.splice(0, lists.length);
+    setDataVersion((current) => current + 1);
+    setDataError('');
     const loadEntries = async () => {
-      const records = await pb
-        .collection('todos')
-        .getFullList({ filter: `owner = "${pb.authStore.record?.id}"`, sort: 'due_date' });
+      const filter = `owner = "${userId}"`;
+      const activeContainerFilter = `${filter} && archived = false`;
+      const [tasks, events, taskLists, calendars] = await Promise.all([
+        pb.collection('todos').getFullList({ filter, sort: 'due_date' }),
+        pb.collection('events').getFullList({ filter, sort: 'start_date' }),
+        pb.collection('lists').getFullList({ filter: activeContainerFilter, sort: 'name' }),
+        pb.collection('calendars').getFullList({ filter: activeContainerFilter, sort: 'name' }),
+      ]);
+      const containers = [
+        ...taskLists.map((record) => ({
+          id: record.id,
+          name: String(record.name),
+          color: String(record.color),
+          description: String(record.description ?? ''),
+          kind: 'list' as const,
+        })),
+        ...calendars.map((record) => ({
+          id: record.id,
+          name: String(record.name),
+          color: String(record.color),
+          description: String(record.description ?? ''),
+          kind: 'calendar' as const,
+        })),
+      ];
+      const containerById = new Map(containers.map((container) => [container.id, container]));
+
+      const toEntry = (record: RecordModel, type: 'task' | 'event'): Entry | null => {
+        const containerId = String(type === 'task' ? record.list : record.calendar);
+        const container = containerById.get(containerId);
+        if (!container) return null;
+        return {
+          id: record.id,
+          title: String(record.title ?? ''),
+          description: String(record.description ?? ''),
+          date:
+            String(type === 'task' ? record.due_date : record.start_date).slice(0, 10) ||
+            new Date().toISOString().slice(0, 10),
+          time: record.all_day ? undefined : String(record.start_date ?? '').slice(11, 16),
+          containerId: container.id,
+          list: container.name,
+          color: container.color,
+          type,
+          done: Boolean(record.completed || record.status === 'COMPLETED'),
+          fields: record as unknown as Record<string, unknown>,
+        };
+      };
+      const rangeStart = new Date();
+      rangeStart.setFullYear(rangeStart.getFullYear() - 1);
+      const rangeEnd = new Date();
+      rangeEnd.setFullYear(rangeEnd.getFullYear() + 2);
+      const occurrenceParams = new URLSearchParams({
+        start: rangeStart.toISOString(),
+        end: rangeEnd.toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        max: '5000',
+      });
+      let occurrences: Array<{
+        id: string;
+        masterId: string;
+        start: string;
+        end: string;
+        allDay: boolean;
+        recurrenceId?: string;
+      }> = [];
+      let occurrenceError = false;
+      try {
+        const occurrenceResponse = await apiFetch(`/api/calendar/occurrences?${occurrenceParams}`, {
+          headers: { Authorization: `Bearer ${pb.authStore.token}` },
+        });
+        if (!occurrenceResponse.ok) throw new Error('Could not load recurring events.');
+        occurrences = (await occurrenceResponse.json()) as typeof occurrences;
+      } catch {
+        occurrenceError = true;
+      }
+      if (!isCurrent()) return;
+      const eventById = new Map(events.map((record) => [record.id, record]));
+      const recurringEventIds = new Set(
+        events.filter((record) => String(record.rrule ?? '').trim()).map((record) => record.id),
+      );
+      const eventEntries = occurrences
+        .map((occurrence) => {
+          if (!recurringEventIds.has(occurrence.masterId)) return null;
+          const master = eventById.get(occurrence.masterId);
+          if (!master) return null;
+          const entry = toEntry(master, 'event');
+          if (!entry) return null;
+          return {
+            ...entry,
+            id: occurrence.id,
+            masterId: occurrence.masterId,
+            date: occurrence.start.slice(0, 10),
+            time: occurrence.allDay ? undefined : occurrence.start.slice(11, 16),
+            fields: {
+              ...entry.fields,
+              start_date: occurrence.start,
+              end_date: occurrence.end,
+              all_day: occurrence.allDay,
+              recurrence_id: occurrence.recurrenceId,
+            },
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+      let hiddenContainerIds: string[] = [];
+      try {
+        hiddenContainerIds = JSON.parse(
+          localStorage.getItem(`taskboard-hidden-containers-${userId}`) ?? '[]',
+        ) as string[];
+      } catch {
+        hiddenContainerIds = [];
+      }
+      const oneOffEvents = events
+        .filter((record) => !recurringEventIds.has(record.id))
+        .map((record) => toEntry(record, 'event'))
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+      const recurringFallbacks = occurrenceError
+        ? events
+            .filter((record) => recurringEventIds.has(record.id))
+            .map((record) => toEntry(record, 'event'))
+            .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+        : [];
+      const loadedEntries = [
+        ...tasks
+          .map((record) => toEntry(record, 'task'))
+          .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
+        ...oneOffEvents,
+        ...eventEntries,
+        ...recurringFallbacks,
+      ];
+      if (!isCurrent()) return;
       entries.splice(
         0,
         entries.length,
-        ...records.map((record) => ({
-          id: record.id,
-          title: record.title,
-          description: '',
-          date: record.due_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
-          list: 'Tasks',
-          color: '#87c4a8',
-          type: 'task' as const,
-          done: record.completed,
+        ...loadedEntries.filter((entry) => !hiddenContainerIds.includes(entry.containerId)),
+      );
+      lists.splice(
+        0,
+        lists.length,
+        ...containers.map((container) => ({
+          id: container.id,
+          name: String(container.name),
+          color: String(container.color || '#3b6ea8'),
+          description: String(container.description || ''),
+          kind: container.kind,
+          count: loadedEntries.filter((entry) => entry.containerId === container.id).length,
         })),
       );
-      setDataVersion((version) => version + 1);
+      setDataError(
+        occurrenceError
+          ? 'Recurring events are unavailable. Showing their base events instead.'
+          : '',
+      );
+      setDataVersion((current) => current + 1);
     };
-    void loadEntries().catch(console.error);
-  }, [authenticated]);
+    void loadEntries().catch(() => {
+      if (isCurrent()) setDataError('Could not load your entries.');
+    });
+  }, [authenticated, authUserId, refreshKey]);
 
   if (!authenticated)
     return <AuthScreen mode={pathname === '/auth/register' ? 'register' : 'login'} />;
   const content =
     activeTab === 'calendar' ? (
       <CalendarTab
+        onEdit={(entry) => {
+          setEditingEntry(entry);
+          setCreateType(entry.type);
+          setListOnlyComposer(false);
+          setTaskEventOnlyComposer(true);
+          setComposerOpen(true);
+        }}
         onDayClick={() => {
+          setEditingEntry(null);
           setCreateType('task');
           setListOnlyComposer(false);
           setTaskEventOnlyComposer(true);
@@ -122,18 +309,38 @@ export function App() {
       />
     ) : activeTab === 'lists' ? (
       <ListsTab
+        onChanged={() => setRefreshKey((key) => key + 1)}
+        onEdit={(entry) => {
+          setEditingEntry(entry);
+          setCreateType(entry.type);
+          setListOnlyComposer(false);
+          setTaskEventOnlyComposer(true);
+          setComposerOpen(true);
+        }}
         onAdd={() => {
+          setEditingEntry(null);
           setCreateType('list');
           setListOnlyComposer(true);
           setTaskEventOnlyComposer(false);
           setComposerOpen(true);
         }}
       />
+    ) : activeTab === 'people' ? (
+      <PeopleTab />
     ) : activeTab === 'settings' ? (
-      <SettingsTab />
+      <SettingsTab onChanged={() => setRefreshKey((key) => key + 1)} />
     ) : (
       <UpcomingTab
+        onChanged={() => setRefreshKey((key) => key + 1)}
+        onEdit={(entry) => {
+          setEditingEntry(entry);
+          setCreateType(entry.type);
+          setListOnlyComposer(false);
+          setTaskEventOnlyComposer(true);
+          setComposerOpen(true);
+        }}
         onAdd={() => {
+          setEditingEntry(null);
           setCreateType('task');
           setListOnlyComposer(false);
           setTaskEventOnlyComposer(false);
@@ -159,46 +366,90 @@ export function App() {
           } else if (tab === 'lists') {
             closeNotifications();
             void navigate({ to: '/lists' });
+          } else if (tab === 'people') {
+            closeNotifications();
+            void navigate({ to: '/people' });
           } else if (tab === 'search') {
             closeNotifications();
             setSearchOpen(true);
+            void navigate({ to: '/search' });
           } else {
             closeNotifications();
             void navigate({ to: '/settings' });
           }
         }}
-        notificationCount={0}
+        notificationCount={notificationCount}
       />
       <main className="main-content">
+        {dataError && (
+          <p className="form-error app-error" role="alert">
+            {dataError}
+          </p>
+        )}
         <div key={activeTab} className="tab-page-transition">
           {content}
         </div>
       </main>
-      <SearchTab open={searchOpen} onOpenChange={setSearchOpen} className="search-dialog" />
-      {notificationsOpen && (
-        <div ref={notificationsRef}>
-          <NotificationsPopover
-            closing={notificationsClosing}
-            onClose={closeNotifications}
-            onAnimationEnd={(event) => {
-              if (event.target === event.currentTarget && notificationsClosing) {
-                setNotificationsOpen(false);
-                setNotificationsClosing(false);
-              }
-            }}
-          />
-        </div>
-      )}
+      <SearchTab
+        open={searchOpen || pathname === '/search'}
+        onOpenChange={(open) => {
+          setSearchOpen(open);
+          if (!open && pathname === '/search') void navigate({ to: '/' });
+        }}
+        onSelect={(result) => {
+          const entry = entries.find((item) => item.id === result.id);
+          if (entry) {
+            setEditingEntry(entry);
+            setCreateType(entry.type);
+            setListOnlyComposer(false);
+            setTaskEventOnlyComposer(true);
+            setComposerOpen(true);
+            setSearchOpen(false);
+          } else if (result.type === 'contact') {
+            void navigate({ to: '/people' });
+            setSearchOpen(false);
+          } else if (result.type === 'list' || result.type === 'calendar') {
+            void navigate({ to: result.type === 'calendar' ? '/settings' : '/lists' });
+            setSearchOpen(false);
+          }
+        }}
+        className="search-dialog"
+      />
+      <div ref={notificationsRef}>
+        <NotificationsPopover
+          open={notificationsOpen}
+          closing={notificationsClosing}
+          onClose={closeNotifications}
+          onCountChange={setNotificationCount}
+          onAnimationEnd={(event) => {
+            if (event.target === event.currentTarget && notificationsClosing) {
+              setNotificationsOpen(false);
+              setNotificationsClosing(false);
+            }
+          }}
+        />
+      </div>
       <CreateComposer
         open={composerOpen}
         listOnly={listOnlyComposer}
         taskEventOnly={taskEventOnlyComposer}
         type={createType}
         color={createColor}
+        editing={editingEntry}
         onTypeChange={setCreateType}
         onColorChange={setCreateColor}
-        onClose={() => setComposerOpen(false)}
-        onCreated={() => setDataVersion((version) => version + 1)}
+        onClose={() => {
+          setComposerOpen(false);
+          setEditingEntry(null);
+          setListOnlyComposer(false);
+          setTaskEventOnlyComposer(false);
+        }}
+        onCreated={() => {
+          setEditingEntry(null);
+          setListOnlyComposer(false);
+          setTaskEventOnlyComposer(false);
+          setRefreshKey((key) => key + 1);
+        }}
       />
     </div>
   );

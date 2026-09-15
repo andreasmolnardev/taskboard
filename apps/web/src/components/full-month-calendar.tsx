@@ -35,7 +35,7 @@ export function FullMonthCalendar({
   return (
     <div className="full-month-calendar">
       <div className="full-month-heading">
-        <strong>Week</strong>
+        <strong></strong>
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
           .slice(weekStart)
           .concat(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].slice(0, weekStart))
@@ -52,7 +52,11 @@ export function FullMonthCalendar({
           const isWeekStart = (date.getDay() - weekStart + 7) % 7 === 0;
           return (
             <Fragment key={`${dateKey}-${index}`}>
-              {isWeekStart && <span className="calendar-week-gutter" aria-hidden="true">{getISOWeekNumber(date)}</span>}
+              {isWeekStart && (
+                <span className="calendar-week-gutter" aria-hidden="true">
+                  {getISOWeekNumber(date)}
+                </span>
+              )}
               <div
                 className={`full-month-cell ${isCurrentMonth ? '' : 'is-outside'} ${isToday ? 'is-today' : ''}`}
                 role="button"

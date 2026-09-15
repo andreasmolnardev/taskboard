@@ -4,16 +4,22 @@ import { App } from './app';
 const rootRoute = createRootRoute({ component: App });
 
 const upcomingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' });
+const calendarRoute = createRoute({ getParentRoute: () => rootRoute, path: '/calendar' });
 const listsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/lists' });
+const peopleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/people' });
 const searchRoute = createRoute({ getParentRoute: () => rootRoute, path: '/search' });
+
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings' });
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/auth/login' });
 const registerRoute = createRoute({ getParentRoute: () => rootRoute, path: '/auth/register' });
 
 const routeTree = rootRoute.addChildren([
   upcomingRoute,
+  calendarRoute,
   listsRoute,
+  peopleRoute,
   searchRoute,
+
   settingsRoute,
   loginRoute,
   registerRoute,

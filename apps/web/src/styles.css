@@ -136,6 +136,16 @@ button {
 .form-error {
   margin: 14px 0 0;
 }
+.app-error {
+  margin: 0 0 16px;
+}
+.entry-error {
+  flex: 0 0 auto;
+  max-width: 180px;
+  margin: 0;
+  color: #d76a45;
+  font-size: 11px;
+}
 .sidebar {
   width: 54px;
   background: var(--sidebar);
@@ -507,10 +517,17 @@ h3 {
 }
 .calendar-week-page {
   flex: 0 0 100%;
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 12px;
+  display: block;
+  width: 100%;
+  min-width: 0;
   padding: 8px 2px 24px;
+}
+.time-grid-root {
+  width: 100%;
+  min-width: 0;
+}
+.time-grid-days {
+  min-width: 0;
 }
 .calendar-week-day {
   min-width: 0;

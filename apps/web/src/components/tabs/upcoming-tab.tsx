@@ -4,7 +4,15 @@ import { entries, formatDate, lists, type Entry } from '../../data';
 import { CalendarMonth } from '../calendar-month';
 import { EntryRow } from '../entry-row';
 
-export function UpcomingTab({ onAdd }: { onAdd: () => void }) {
+export function UpcomingTab({
+  onAdd,
+  onEdit,
+  onChanged,
+}: {
+  onAdd: () => void;
+  onEdit: (entry: Entry) => void;
+  onChanged: () => void;
+}) {
   const now = new Date();
   const [filterOpen, setFilterOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'task' | 'event'>('all');
@@ -66,7 +74,7 @@ export function UpcomingTab({ onAdd }: { onAdd: () => void }) {
           <div className="entry-group" key={date}>
             <h2>{formatDate(date)}</h2>
             {dayEntries.map((entry) => (
-              <EntryRow entry={entry} key={entry.id} />
+              <EntryRow entry={entry} key={entry.id} onEdit={onEdit} onChanged={onChanged} />
             ))}
           </div>
         ))}

@@ -53,6 +53,24 @@ slopstack backup restore <exact-name-from-list> --confirm
 
 Keep at least twice the data size free during backup and restore. Restore a copy into an isolated instance first when possible. Run a restore drill after setup and at least monthly. A backup is not proven until restore succeeds.
 
+### Safe restore drill
+
+Run the repository smoke test after the service is built and backup storage is configured:
+
+```sh
+./scripts/backup-restore-smoke-test.sh
+```
+
+The script creates a manual archive, then restores it into a temporary data directory through a one-off container. It never restores the live `slopstack-data` volume. With the compose defaults it stages the local archive automatically; when local storage has no copy, the isolated restore uses the configured S3-compatible store. The new manual archive remains in the configured backup store for normal retention cleanup.
+
+For a different Compose file or service name, set `COMPOSE_FILE` or `BACKUP_COMPOSE_SERVICE`:
+
+```sh
+COMPOSE_FILE=/path/to/docker-compose.yml BACKUP_COMPOSE_SERVICE=slopstack ./scripts/backup-restore-smoke-test.sh
+```
+
+The drill needs Docker access and enough temporary disk space for the restored data. Do not put credentials in the script or command line; provide S3 credentials through the deployment secret store as described above.
+
 ## Frontend
 
 The frontend is a static Vite build. Keep `/api` proxied to the Go runtime or set `VITE_API_URL` to the deployed API origin.

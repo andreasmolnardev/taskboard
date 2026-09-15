@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"sort"
 	"text/tabwriter"
@@ -15,6 +16,8 @@ import (
 )
 
 var backupNamePattern = regexp.MustCompile(`^@?[a-z0-9_-]+\.zip$`)
+
+const backupRestoreRestartedEnv = "SLOPSTACK_BACKUP_RESTORE_RESTARTED"
 
 type BackupFile struct {
 	Name     string
@@ -114,6 +117,13 @@ func (c *BackupCommand) restoreCommand() *cobra.Command {
 			if !confirmed {
 				return errors.New("restore requires --confirm")
 			}
+			if os.Getenv(backupRestoreRestartedEnv) == "1" {
+				return nil
+			}
+			if err := os.Setenv(backupRestoreRestartedEnv, "1"); err != nil {
+				return fmt.Errorf("prepare backup restore restart: %w", err)
+			}
+			defer func() { _ = os.Unsetenv(backupRestoreRestartedEnv) }()
 			if err := c.Restore(cmd.Context(), name); err != nil {
 				return fmt.Errorf("restore backup %q: %w", name, err)
 			}

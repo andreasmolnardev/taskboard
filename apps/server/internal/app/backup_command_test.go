@@ -57,6 +57,25 @@ func TestBackupRestoreRequiresConfirmation(t *testing.T) {
 	}
 }
 
+func TestBackupRestoreSkipsCommandAfterRestart(t *testing.T) {
+	t.Setenv(backupRestoreRestartedEnv, "1")
+	restored := false
+	command := (&BackupCommand{
+		Restore: func(context.Context, string) error {
+			restored = true
+			return nil
+		},
+	}).restoreCommand()
+	command.SetArgs([]string{"safe.zip", "--confirm"})
+
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if restored {
+		t.Fatal("restore ran again after restart")
+	}
+}
+
 func TestBackupRestoreRejectsUnsafeName(t *testing.T) {
 	restored := false
 	command := (&BackupCommand{

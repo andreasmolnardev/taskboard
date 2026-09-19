@@ -615,7 +615,7 @@ h3 {
 }
 .calendar-week-gutter {
   display: block;
-  padding-top: 12px;
+  align-self: center;
   color: var(--muted);
   font-size: 10px;
   text-align: right;

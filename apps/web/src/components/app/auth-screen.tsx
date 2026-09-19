@@ -20,6 +20,24 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
       .then((policy: { mode: 'disabled' | 'approval' | 'otp' }) => setRegistrationMode(policy.mode))
       .catch(() => setError('Could not load registration settings.'));
   }, [mode]);
+  const handleGuestAuth = async () => {
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const response = await apiFetch('/api/auth/guest', { method: 'POST' });
+      if (!response.ok) throw new Error('Guest authentication failed');
+      const result: {
+        token: string;
+        record: { id: string; collectionId: string; collectionName: string; [key: string]: unknown };
+      } = await response.json();
+      pb.authStore.save(result.token, result.record);
+    } catch {
+      setError('Could not authenticate as a guest.');
+    } finally {
+      setBusy(false);
+    }
+  };
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -99,6 +117,16 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
             {mode === 'register' ? 'Sign in' : 'Sign up'}
           </Link>
         </p>
+        {mode === 'login' && import.meta.env.DEV && (
+          <button
+            type="button"
+            className="button auth-guest"
+            disabled={busy}
+            onClick={() => void handleGuestAuth()}
+          >
+            {busy ? 'Authenticating…' : 'Authenticate as guest'}
+          </button>
+        )}
       </form>
     </main>
   );

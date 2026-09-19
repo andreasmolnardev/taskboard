@@ -188,6 +188,30 @@ func registerAuthRoutes(e *core.ServeEvent, config Config) {
 	e.Router.GET("/api/auth/registration-policy", func(event *core.RequestEvent) error {
 		return event.JSON(http.StatusOK, map[string]string{"mode": string(config.RegistrationMode)})
 	})
+	if !config.Development {
+		return
+	}
+	e.Router.POST("/api/auth/guest", func(event *core.RequestEvent) error {
+		user, err := ensureGuestUser(event.App)
+		if err != nil {
+			return event.InternalServerError("could not create guest user", err)
+		}
+		token, err := user.NewAuthToken()
+		if err != nil {
+			return event.InternalServerError("could not create guest token", err)
+		}
+		return event.JSON(http.StatusOK, map[string]any{
+			"token": token,
+			"record": map[string]any{
+				"id":             user.Id,
+				"collectionId":   user.Collection().Id,
+				"collectionName": user.Collection().Name,
+				"email":          user.Email(),
+				"verified":       user.Verified(),
+				"display_name":   user.GetString("display_name"),
+			},
+		})
+	})
 }
 
 func registerTodoAPI(api huma.API) {

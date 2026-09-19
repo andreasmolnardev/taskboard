@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Bell, CalendarDays, CheckSquare, Home, List, Search, Settings, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -28,19 +29,25 @@ export function Sidebar({ activeTab, onChange, notificationCount }: SidebarProps
       </div>
       <nav className="sidebar-nav">
         {items.map(({ id, label, icon: Icon }) => (
-          <button
-            className={`sidebar-link ${activeTab === id ? 'is-active' : ''}`}
-            key={id}
-            onClick={() => onChange(id)}
-            aria-label={label}
-            aria-current={activeTab === id ? 'page' : undefined}
-          >
-            <Icon size={20} />
-            <span className="sidebar-tooltip">{label}</span>
-            {id === 'notifications' && notificationCount > 0 && (
-              <span className="notification-badge">{notificationCount}</span>
+          <Fragment key={id}>
+            {id === 'search' && (
+              <span className="sidebar-separator" aria-hidden="true">
+                •
+              </span>
             )}
-          </button>
+            <button
+              className={`sidebar-link ${activeTab === id ? 'is-active' : ''}`}
+              onClick={() => onChange(id)}
+              aria-label={label}
+              aria-current={activeTab === id ? 'page' : undefined}
+            >
+              <Icon size={20} />
+              <span className="sidebar-tooltip">{label}</span>
+              {id === 'notifications' && notificationCount > 0 && (
+                <span className="notification-badge">{notificationCount}</span>
+              )}
+            </button>
+          </Fragment>
         ))}
       </nav>
     </aside>

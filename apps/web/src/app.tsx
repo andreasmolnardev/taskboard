@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import type { RecordModel } from 'pocketbase';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useTheme } from 'next-themes';
@@ -296,6 +297,14 @@ export function App() {
     });
   }, [authenticated, authUserId, refreshKey]);
 
+  const openCreateComposer = () => {
+    setEditingEntry(null);
+    setCreateType('task');
+    setListOnlyComposer(false);
+    setTaskEventOnlyComposer(false);
+    setComposerOpen(true);
+  };
+
   if (!authenticated)
     return <AuthScreen mode={pathname === '/auth/register' ? 'register' : 'login'} />;
   const content =
@@ -348,13 +357,6 @@ export function App() {
           setTaskEventOnlyComposer(true);
           setComposerOpen(true);
         }}
-        onAdd={() => {
-          setEditingEntry(null);
-          setCreateType('task');
-          setListOnlyComposer(false);
-          setTaskEventOnlyComposer(false);
-          setComposerOpen(true);
-        }}
       />
     );
 
@@ -399,6 +401,16 @@ export function App() {
           {content}
         </div>
       </main>
+      {(activeTab === 'upcoming' || activeTab === 'calendar') && (
+        <button
+          type="button"
+          className="button button-primary floating-create-button"
+          onClick={openCreateComposer}
+          aria-label="New entry"
+        >
+          <Plus size={20} />
+        </button>
+      )}
       <SearchTab
         open={searchOpen || pathname === '/search'}
         onOpenChange={(open) => {

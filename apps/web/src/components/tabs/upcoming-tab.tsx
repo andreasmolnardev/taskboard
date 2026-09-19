@@ -1,15 +1,13 @@
 import { useState } from 'react';
-import { ChevronDown, Filter, Plus } from 'lucide-react';
+import { ChevronDown, Filter } from 'lucide-react';
 import { entries, formatDate, getActiveContainers, lists, type Entry } from '../../data';
 import { CalendarMonth } from '../calendar-month';
 import { EntryRow } from '../entry-row';
 
 export function UpcomingTab({
-  onAdd,
   onEdit,
   onChanged,
 }: {
-  onAdd: () => void;
   onEdit: (entry: Entry) => void;
   onChanged: () => void;
 }) {
@@ -52,9 +50,6 @@ export function UpcomingTab({
               </div>
             )}
           </div>
-          <button className="button button-primary" onClick={onAdd} aria-label="New entry">
-            <Plus size={17} />
-          </button>
         </div>
       </header>
       <section className="calendar-strip" aria-label="Upcoming months">

@@ -367,6 +367,18 @@ h3 {
   display: flex;
   gap: 10px;
 }
+.floating-create-button {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 4;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+  box-shadow: var(--shadow);
+}
 .button {
   border: 1px solid var(--border);
   background: var(--card);
@@ -1485,6 +1497,10 @@ footer .sync-dot {
   }
   .header-actions {
     width: 100%;
+  }
+  .floating-create-button {
+    right: 16px;
+    bottom: 76px;
   }
   .header-actions .button {
     flex: 1;

@@ -152,7 +152,6 @@ export function PeopleTab() {
       <header className="page-header">
         <div>
           <h1>People</h1>
-          <p className="people-subtitle">Your contacts, available through CardDAV.</p>
         </div>
         <button className="button button-primary" onClick={() => edit()}>
           <Plus size={17} /> Add person

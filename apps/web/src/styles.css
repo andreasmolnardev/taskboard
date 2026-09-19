@@ -1486,7 +1486,6 @@ footer .sync-dot {
 }
 
 .people-page { width: 100%; }
-.people-subtitle { color: var(--muted); margin: 8px 0 0; font-size: 13px; }
 .people-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: 34px; }
 .people-list { border-right: 1px solid var(--border); padding-right: 24px; }
 .person-row { width: 100%; display: flex; align-items: center; gap: 11px; text-align: left; padding: 11px; border: 0; border-radius: 9px; background: transparent; color: var(--foreground); }

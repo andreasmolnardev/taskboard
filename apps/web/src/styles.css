@@ -1056,6 +1056,61 @@ kbd {
   font-size: 12px;
   margin: 0;
 }
+.account-settings {
+  align-items: stretch;
+  flex-direction: column;
+}
+.account-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.account-forms {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.account-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 20px;
+  background: var(--soft);
+  border-radius: 10px;
+}
+.account-form h3 {
+  margin: 0 0 5px;
+  font-size: 13px;
+}
+.account-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.account-form input {
+  width: 100%;
+  padding: 9px 10px;
+  color: var(--foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: none;
+}
+.account-form input:focus {
+  border-color: var(--primary);
+}
+.account-form .button {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+.form-message {
+  color: var(--primary) !important;
+}
 .theme-toggle {
   display: flex;
   gap: 4px;
@@ -1484,6 +1539,13 @@ footer .sync-dot {
   .settings-section {
     align-items: start;
     flex-direction: column;
+  }
+  .account-header {
+    width: 100%;
+  }
+  .account-forms {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
   .search-options {
     flex-wrap: wrap;

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/pocketbase/dbx"
@@ -55,6 +56,9 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 
 func applyBackupConfig(app core.App, config Config) error {
 	settings := app.Settings()
+	if config.PublicURL != "" {
+		settings.Meta.AppURL = strings.TrimRight(config.PublicURL, "/")
+	}
 	if !config.BackupEnabled {
 		settings.Backups.Cron = ""
 		settings.Backups.S3.Enabled = false

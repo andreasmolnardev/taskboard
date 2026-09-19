@@ -85,6 +85,7 @@ func TestApplyBackupConfig(t *testing.T) {
 	defer testApp.Cleanup()
 
 	config := Config{
+		PublicURL:     "https://taskboard.example/",
 		BackupEnabled: true,
 		BackupCron:    "0 3 * * *",
 		BackupMaxKeep: 14,
@@ -97,6 +98,9 @@ func TestApplyBackupConfig(t *testing.T) {
 	}
 	if testApp.Settings().Backups.CronMaxKeep != config.BackupMaxKeep {
 		t.Fatalf("expected backup retention %d", config.BackupMaxKeep)
+	}
+	if testApp.Settings().Meta.AppURL != "https://taskboard.example" {
+		t.Fatalf("expected app URL without trailing slash, got %q", testApp.Settings().Meta.AppURL)
 	}
 }
 

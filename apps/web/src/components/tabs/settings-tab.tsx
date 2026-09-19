@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { CalendarDays, Monitor, Moon, Palette, Sun, Trash2, Upload } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { apiBaseUrl, apiFetch } from '../../api/client';
@@ -42,6 +42,16 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [appPasswordBusy, setAppPasswordBusy] = useState(false);
   const [appPasswordError, setAppPasswordError] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailMessage, setEmailMessage] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const visibilityStorageKey = `taskboard-hidden-containers-${userId}`;
   const [hiddenContainerIds, setHiddenContainerIds] = useState<string[]>(() => {
@@ -111,6 +121,69 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       setAppPasswords((current) => current.filter((password) => password.id !== id));
     } catch {
       setAppPasswordError('Could not revoke app password.');
+    }
+  };
+
+  const requestEmailChange = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const email = newEmail.trim();
+    const currentEmail = String(pb.authStore.record?.email ?? '');
+    setEmailBusy(true);
+    setEmailMessage('');
+    setEmailError('');
+    try {
+      if (email.toLowerCase() === currentEmail.toLowerCase()) {
+        throw new Error('That is already your current email address.');
+      }
+      await pb.collection('users').requestEmailChange(email);
+      setNewEmail('');
+      setEmailMessage('Check your new email address for a confirmation link.');
+    } catch (error) {
+      setEmailError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Could not request an email change. Check the address and try again.',
+      );
+    } finally {
+      setEmailBusy(false);
+    }
+  };
+
+  const changePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordBusy(true);
+    setPasswordMessage('');
+    setPasswordError('');
+    try {
+      if (password !== passwordConfirmation) {
+        throw new Error('New passwords do not match.');
+      }
+      const record = pb.authStore.record;
+      const email = String(record?.email ?? '');
+      if (!record?.id || !email) throw new Error('Your session has expired. Please sign in again.');
+      await pb.collection('users').update(record.id, {
+        oldPassword: currentPassword,
+        password,
+        passwordConfirm: passwordConfirmation,
+      });
+      try {
+        await pb.collection('users').authWithPassword(email, password);
+      } catch {
+        pb.authStore.clear();
+        return;
+      }
+      setCurrentPassword('');
+      setPassword('');
+      setPasswordConfirmation('');
+      setPasswordMessage('Your password has been changed.');
+    } catch (error) {
+      setPasswordError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Could not change your password. Check your current password and try again.',
+      );
+    } finally {
+      setPasswordBusy(false);
     }
   };
 
@@ -318,14 +391,98 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
           </>
         )}
         {activeSection === 'account' && (
-          <div className="settings-section">
-            <div>
-              <h2>Account</h2>
-              <p>{pb.authStore.record?.email}</p>
+          <div className="settings-section account-settings">
+            <div className="account-header">
+              <div>
+                <h2>Account</h2>
+                <p>{pb.authStore.record?.email}</p>
+              </div>
+              <button className="button button-quiet" onClick={() => pb.authStore.clear()}>
+                Log out
+              </button>
             </div>
-            <button className="button button-quiet" onClick={() => pb.authStore.clear()}>
-              Log out
-            </button>
+            <div className="account-forms">
+              <form className="account-form" onSubmit={(event) => void requestEmailChange(event)}>
+                <div>
+                  <h3>Change email</h3>
+                  <p>We will send a confirmation link to your new address.</p>
+                </div>
+                <label>
+                  New email
+                  <input
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={newEmail}
+                    onChange={(event) => setNewEmail(event.target.value)}
+                  />
+                </label>
+                {emailError && (
+                  <p className="form-error" role="alert">
+                    {emailError}
+                  </p>
+                )}
+                {emailMessage && (
+                  <p className="form-message" role="status">
+                    {emailMessage}
+                  </p>
+                )}
+                <button className="button button-primary" disabled={emailBusy}>
+                  {emailBusy ? 'Sending…' : 'Change email'}
+                </button>
+              </form>
+              <form className="account-form" onSubmit={(event) => void changePassword(event)}>
+                <div>
+                  <h3>Change password</h3>
+                  <p>Use a password you do not use anywhere else.</p>
+                </div>
+                <label>
+                  Current password
+                  <input
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                  />
+                </label>
+                <label>
+                  New password
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Confirm new password
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    value={passwordConfirmation}
+                    onChange={(event) => setPasswordConfirmation(event.target.value)}
+                  />
+                </label>
+                {passwordError && (
+                  <p className="form-error" role="alert">
+                    {passwordError}
+                  </p>
+                )}
+                {passwordMessage && (
+                  <p className="form-message" role="status">
+                    {passwordMessage}
+                  </p>
+                )}
+                <button className="button button-primary" disabled={passwordBusy}>
+                  {passwordBusy ? 'Changing…' : 'Change password'}
+                </button>
+              </form>
+            </div>
           </div>
         )}
         {activeSection === 'calendar' && (

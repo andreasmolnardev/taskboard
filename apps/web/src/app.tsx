@@ -383,7 +383,6 @@ export function App() {
           } else if (tab === 'search') {
             closeNotifications();
             setSearchOpen(true);
-            void navigate({ to: '/search' });
           } else {
             closeNotifications();
             void navigate({ to: '/settings' });

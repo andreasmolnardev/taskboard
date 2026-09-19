@@ -40,4 +40,14 @@ describe('CalendarMonth', () => {
     expect(html).toContain('March 2025');
     expect(html.match(/<i><\/i>/g)).toHaveLength(2);
   });
+
+  it('shows an accessible expand control when supplied', () => {
+    vi.stubGlobal('localStorage', { getItem: vi.fn(() => 'sunday') });
+
+    const html = renderToStaticMarkup(
+      <CalendarMonth year={2025} month={2} onExpand={() => undefined} />,
+    );
+
+    expect(html).toContain('aria-label="Open March 2025 in calendar"');
+  });
 });

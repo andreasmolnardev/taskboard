@@ -7,11 +7,15 @@ import { EntryRow } from '../entry-row';
 export function UpcomingTab({
   onEdit,
   onChanged,
+  onOpenMonth,
 }: {
   onEdit: (entry: Entry) => void;
   onChanged: () => void;
+  onOpenMonth: (year: number, month: number) => void;
 }) {
   const now = new Date();
+  const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'task' | 'event'>('all');
   const visibleEntries = entries.filter((entry) => filter === 'all' || entry.type === filter);
@@ -53,8 +57,16 @@ export function UpcomingTab({
         </div>
       </header>
       <section className="calendar-strip" aria-label="Upcoming months">
-        <CalendarMonth year={now.getFullYear()} month={now.getMonth()} />
-        <CalendarMonth year={now.getFullYear()} month={now.getMonth() + 1} />
+        <CalendarMonth
+          year={currentMonth.getFullYear()}
+          month={currentMonth.getMonth()}
+          onExpand={() => onOpenMonth(currentMonth.getFullYear(), currentMonth.getMonth())}
+        />
+        <CalendarMonth
+          year={nextMonth.getFullYear()}
+          month={nextMonth.getMonth()}
+          onExpand={() => onOpenMonth(nextMonth.getFullYear(), nextMonth.getMonth())}
+        />
       </section>
       <div className="list-legend">
         {getActiveContainers(lists).map((list) => (

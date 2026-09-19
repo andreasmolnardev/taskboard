@@ -1,6 +1,15 @@
+import { Maximize2 } from 'lucide-react';
 import { entries, getWeekStart } from '../data';
 
-export function CalendarMonth({ year, month }: { year: number; month: number }) {
+export function CalendarMonth({
+  year,
+  month,
+  onExpand,
+}: {
+  year: number;
+  month: number;
+  onExpand?: () => void;
+}) {
   const weekStart = getWeekStart() === 'monday' ? 1 : 0;
   const firstDay = (new Date(year, month, 1).getDay() - weekStart + 7) % 7;
   const days = new Date(year, month + 1, 0).getDate();
@@ -13,14 +22,27 @@ export function CalendarMonth({ year, month }: { year: number; month: number }) 
   );
   const today = new Date();
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+  const monthName = new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(year, month, 1));
 
   return (
     <div className="month-card">
-      <h3>
-        {new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(
-          new Date(year, month, 1),
+      <div className="month-card-heading">
+        <h3>{monthName}</h3>
+        {onExpand && (
+          <button
+            type="button"
+            className="month-expand-button"
+            onClick={onExpand}
+            aria-label={`Open ${monthName} in calendar`}
+            title={`Open ${monthName} in calendar`}
+          >
+            <Maximize2 size={16} />
+          </button>
         )}
-      </h3>
+      </div>
       <div className="weekdays">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S']
           .slice(weekStart)

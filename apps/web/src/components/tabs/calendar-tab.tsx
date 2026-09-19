@@ -24,6 +24,20 @@ function addMonths(date: Date, amount: number) {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1);
 }
 
+function parseMonth(value: string | undefined) {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  return new Date(year, month - 1, 1);
+}
+
+function monthDifference(from: Date, to: Date) {
+  return (to.getFullYear() - from.getFullYear()) * 12 + to.getMonth() - from.getMonth();
+}
+
 function entryToTimeGrid(entry: Entry): TimeGridEvent {
   const allDay = entry.type === 'task' || Boolean(entry.fields?.all_day);
   const start = allDay
@@ -47,15 +61,19 @@ function entryToTimeGrid(entry: Entry): TimeGridEvent {
 export function CalendarTab({
   onDayClick,
   onEdit,
+  initialMonth,
 }: {
   onDayClick: () => void;
   onEdit: (entry: Entry) => void;
+  initialMonth?: string;
 }) {
   const [view, setView] = useState<'day' | 'week' | 'month'>('month');
   const [filterOpen, setFilterOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'task' | 'event'>('all');
   const [today] = useState(() => new Date());
-  const [selectedDate, setSelectedDate] = useState(today);
+  const requestedMonth = parseMonth(initialMonth);
+  const requestedMonthOffset = requestedMonth ? monthDifference(today, requestedMonth) : 0;
+  const [selectedDate, setSelectedDate] = useState(requestedMonth ?? today);
   const [todayVisible, setTodayVisible] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -89,7 +107,9 @@ export function CalendarTab({
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const container = scrollRef.current;
-      const page = pageRefs.current[pageRadius];
+      const targetOffset = view === 'month' ? requestedMonthOffset : 0;
+      const targetIndex = Math.max(0, Math.min(pageCount - 1, pageRadius + targetOffset));
+      const page = pageRefs.current[targetIndex];
       if (!container || !page) return;
       if (view === 'month') {
         container.scrollTop = page.offsetTop - (container.clientHeight - page.offsetHeight) / 2;
@@ -98,7 +118,7 @@ export function CalendarTab({
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [view, pageRadius]);
+  }, [view, pageRadius, requestedMonthOffset]);
 
   useEffect(() => {
     const container = scrollRef.current;

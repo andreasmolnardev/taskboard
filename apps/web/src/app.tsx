@@ -22,6 +22,9 @@ export function App() {
   const [authUserId, setAuthUserId] = useState(pb.authStore.record?.id ?? '');
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const calendarSearch = useRouterState({ select: (state) => state.location.search });
+  const requestedCalendarMonth =
+    typeof calendarSearch.month === 'string' ? calendarSearch.month : undefined;
   const activeTab: SidebarTab =
     pathname === '/calendar'
       ? 'calendar'
@@ -310,6 +313,8 @@ export function App() {
   const content =
     activeTab === 'calendar' ? (
       <CalendarTab
+        key={requestedCalendarMonth ?? 'today'}
+        initialMonth={requestedCalendarMonth}
         onEdit={(entry) => {
           setEditingEntry(entry);
           setCreateType(entry.type);
@@ -357,6 +362,12 @@ export function App() {
           setTaskEventOnlyComposer(true);
           setComposerOpen(true);
         }}
+        onOpenMonth={(year, month) => {
+          void navigate({
+            to: '/calendar',
+            search: { month: `${year}-${String(month + 1).padStart(2, '0')}` },
+          });
+        }}
       />
     );
 
@@ -373,7 +384,7 @@ export function App() {
             void navigate({ to: '/' });
           } else if (tab === 'calendar') {
             closeNotifications();
-            void navigate({ to: '/calendar' });
+            void navigate({ to: '/calendar', search: { month: undefined } });
           } else if (tab === 'lists') {
             closeNotifications();
             void navigate({ to: '/lists' });

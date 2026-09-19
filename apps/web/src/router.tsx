@@ -4,7 +4,13 @@ import { App } from './app';
 const rootRoute = createRootRoute({ component: App });
 
 const upcomingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' });
-const calendarRoute = createRoute({ getParentRoute: () => rootRoute, path: '/calendar' });
+const calendarRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/calendar',
+  validateSearch: (search: Record<string, unknown>) => ({
+    month: typeof search.month === 'string' ? search.month : undefined,
+  }),
+});
 const listsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/lists' });
 const peopleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/people' });
 const searchRoute = createRoute({ getParentRoute: () => rootRoute, path: '/search' });

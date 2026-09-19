@@ -76,7 +76,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const carddavBaseUrl = `${apiBaseUrl}/carddav`;
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--user-primary', accentColor);
+    document.documentElement.style.setProperty('--primary', accentColor);
     localStorage.setItem(accentStorageKey, accentColor);
   }, [accentColor, accentStorageKey]);
 

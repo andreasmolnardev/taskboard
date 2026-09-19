@@ -116,6 +116,11 @@ export function App() {
   useEffect(() => {
     if (!authenticated || !authUserId) return;
     const userId = authUserId;
+    const storedAccent = localStorage.getItem(`taskboard-accent-${userId}`);
+    document.documentElement.style.setProperty(
+      '--primary',
+      storedAccent ?? accentColors[0].value,
+    );
     const storedSize = localStorage.getItem(`taskboard-font-size-${userId}`);
     const selectedSize = fontSizes.find((option) => option.value === storedSize);
     document.documentElement.style.setProperty(

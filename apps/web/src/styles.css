@@ -1109,10 +1109,48 @@ kbd {
   justify-content: space-between;
   gap: 20px;
 }
-.account-forms {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+.account-actions {
+  display: flex;
+  flex-direction: column;
+}
+.account-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  padding: 16px 0;
+  color: var(--foreground);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  cursor: pointer;
+}
+.account-action:last-child {
+  border-bottom: 0;
+}
+.account-action span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.account-action strong {
+  font-size: 13px;
+}
+.account-action small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.account-action svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform 160ms ease, color 160ms ease;
+}
+.account-action:hover svg,
+.account-action:focus-visible svg {
+  color: var(--foreground);
+  transform: translateX(2px);
 }
 .account-form {
   display: flex;
@@ -1150,6 +1188,11 @@ kbd {
 .account-form .button {
   align-self: flex-start;
   margin-top: 2px;
+}
+.account-modal .account-form {
+  margin-top: 24px;
+  padding: 0;
+  background: transparent;
 }
 .form-message {
   color: var(--primary) !important;
@@ -1590,8 +1633,7 @@ footer .sync-dot {
   .account-header {
     width: 100%;
   }
-  .account-forms {
-    grid-template-columns: 1fr;
+  .account-actions {
     width: 100%;
   }
   .search-options {

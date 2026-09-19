@@ -1,5 +1,15 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
-import { CalendarDays, Monitor, Moon, Palette, Sun, Trash2, Upload } from 'lucide-react';
+import {
+  CalendarDays,
+  ChevronRight,
+  Monitor,
+  Moon,
+  Palette,
+  Sun,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { apiBaseUrl, apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
@@ -17,6 +27,7 @@ import {
 } from '../../data';
 
 type SettingsSection = 'appearance' | 'account' | 'calendar';
+type AccountModal = 'email' | 'password' | null;
 const settingsSections: SettingsSection[] = ['appearance', 'account', 'calendar'];
 
 export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
@@ -52,6 +63,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [accountModal, setAccountModal] = useState<AccountModal>(null);
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const visibilityStorageKey = `taskboard-hidden-containers-${userId}`;
   const [hiddenContainerIds, setHiddenContainerIds] = useState<string[]>(() => {
@@ -401,87 +413,25 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 Log out
               </button>
             </div>
-            <div className="account-forms">
-              <form className="account-form" onSubmit={(event) => void requestEmailChange(event)}>
-                <div>
-                  <h3>Change email</h3>
-                  <p>We will send a confirmation link to your new address.</p>
-                </div>
-                <label>
-                  New email
-                  <input
-                    type="email"
-                    required
-                    autoComplete="email"
-                    value={newEmail}
-                    onChange={(event) => setNewEmail(event.target.value)}
-                  />
-                </label>
-                {emailError && (
-                  <p className="form-error" role="alert">
-                    {emailError}
-                  </p>
-                )}
-                {emailMessage && (
-                  <p className="form-message" role="status">
-                    {emailMessage}
-                  </p>
-                )}
-                <button className="button button-primary" disabled={emailBusy}>
-                  {emailBusy ? 'Sending…' : 'Change email'}
-                </button>
-              </form>
-              <form className="account-form" onSubmit={(event) => void changePassword(event)}>
-                <div>
-                  <h3>Change password</h3>
-                  <p>Use a password you do not use anywhere else.</p>
-                </div>
-                <label>
-                  Current password
-                  <input
-                    type="password"
-                    required
-                    autoComplete="current-password"
-                    value={currentPassword}
-                    onChange={(event) => setCurrentPassword(event.target.value)}
-                  />
-                </label>
-                <label>
-                  New password
-                  <input
-                    type="password"
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                  />
-                </label>
-                <label>
-                  Confirm new password
-                  <input
-                    type="password"
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                    value={passwordConfirmation}
-                    onChange={(event) => setPasswordConfirmation(event.target.value)}
-                  />
-                </label>
-                {passwordError && (
-                  <p className="form-error" role="alert">
-                    {passwordError}
-                  </p>
-                )}
-                {passwordMessage && (
-                  <p className="form-message" role="status">
-                    {passwordMessage}
-                  </p>
-                )}
-                <button className="button button-primary" disabled={passwordBusy}>
-                  {passwordBusy ? 'Changing…' : 'Change password'}
-                </button>
-              </form>
+            <div className="account-actions">
+              <button className="account-action" type="button" onClick={() => setAccountModal('email')}>
+                <span>
+                  <strong>Change email</strong>
+                  <small>We will send a confirmation link to your new address.</small>
+                </span>
+                <ChevronRight size={18} aria-hidden="true" />
+              </button>
+              <button
+                className="account-action"
+                type="button"
+                onClick={() => setAccountModal('password')}
+              >
+                <span>
+                  <strong>Change password</strong>
+                  <small>Use a password you do not use anywhere else.</small>
+                </span>
+                <ChevronRight size={18} aria-hidden="true" />
+              </button>
             </div>
           </div>
         )}
@@ -624,6 +574,117 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
           </>
         )}
       </section>
+      {accountModal && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => setAccountModal(null)}
+        >
+          <div
+            className="composer account-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="account-modal-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="composer-header">
+              <div>
+                <h2 id="account-modal-title">
+                  {accountModal === 'email' ? 'Change email' : 'Change password'}
+                </h2>
+                <p className="modal-subtitle">
+                  {accountModal === 'email'
+                    ? 'We will send a confirmation link to your new address.'
+                    : 'Use a password you do not use anywhere else.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setAccountModal(null)}
+                aria-label="Close"
+              >
+                <X size={19} />
+              </button>
+            </div>
+            {accountModal === 'email' ? (
+              <form className="account-form" onSubmit={(event) => void requestEmailChange(event)}>
+                <label>
+                  New email
+                  <input
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={newEmail}
+                    onChange={(event) => setNewEmail(event.target.value)}
+                  />
+                </label>
+                {emailError && (
+                  <p className="form-error" role="alert">
+                    {emailError}
+                  </p>
+                )}
+                {emailMessage && (
+                  <p className="form-message" role="status">
+                    {emailMessage}
+                  </p>
+                )}
+                <button className="button button-primary" disabled={emailBusy}>
+                  {emailBusy ? 'Sending…' : 'Change email'}
+                </button>
+              </form>
+            ) : (
+              <form className="account-form" onSubmit={(event) => void changePassword(event)}>
+                <label>
+                  Current password
+                  <input
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                  />
+                </label>
+                <label>
+                  New password
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Confirm new password
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    value={passwordConfirmation}
+                    onChange={(event) => setPasswordConfirmation(event.target.value)}
+                  />
+                </label>
+                {passwordError && (
+                  <p className="form-error" role="alert">
+                    {passwordError}
+                  </p>
+                )}
+                {passwordMessage && (
+                  <p className="form-message" role="status">
+                    {passwordMessage}
+                  </p>
+                )}
+                <button className="button button-primary" disabled={passwordBusy}>
+                  {passwordBusy ? 'Changing…' : 'Change password'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

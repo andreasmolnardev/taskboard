@@ -240,7 +240,7 @@ func calendarProperties(calendar *core.Record) map[xml.Name]string {
 		davName("resourcetype"):                        `<d:collection/><c:calendar/>`,
 		davName("owner"):                               `<d:href>/caldav/principals/` + calendar.GetString("owner") + `/</d:href>`,
 		davName("current-user-privilege-set"):          `<d:privilege><d:all/></d:privilege>`,
-		davName("getcontenttype"):                      "text/calendar; component=vevent",
+		davName("getcontenttype"):                      "text/calendar",
 		calDAVName("supported-calendar-component-set"): `<c:comp name="VEVENT"/><c:comp name="VTODO"/>`,
 		appleName("calendar-color"):                    xmlText(calendar.GetString("color")),
 		calDAVName("calendar-description"):             xmlText(calendar.GetString("description")),
@@ -309,10 +309,34 @@ func calDAVGet(event *core.RequestEvent, user *core.Record) error {
 	}
 	event.Response.Header().Set("ETag", etag)
 	event.Response.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	if etagListContains(event.Request.Header.Get("If-None-Match"), etag) {
+		return event.NoContent(http.StatusNotModified)
+	}
 	if event.Request.Method == http.MethodHead {
 		return event.NoContent(http.StatusOK)
 	}
 	return event.Blob(http.StatusOK, "text/calendar; charset=utf-8", data)
+}
+
+func calDAVResourceComponent(calendar *ical.Calendar) (*ical.Component, error) {
+	var supported *ical.Component
+	for _, child := range calendar.Children {
+		switch child.Name {
+		case ical.CompEvent, ical.CompToDo:
+			if supported != nil {
+				return nil, errors.New("one VEVENT or VTODO component is required")
+			}
+			supported = child
+		case "VTIMEZONE":
+			// Time zone definitions accompany a resource but are not resources.
+		default:
+			return nil, fmt.Errorf("unsupported calendar component %q", child.Name)
+		}
+	}
+	if supported == nil {
+		return nil, errors.New("one VEVENT or VTODO component is required")
+	}
+	return supported, nil
 }
 
 type calDAVPutFailure struct {
@@ -337,10 +361,13 @@ func calDAVPut(event *core.RequestEvent, user *core.Record) error {
 		return event.BadRequestError("calendar resource is too large", err)
 	}
 	calendar, err := ical.NewDecoder(bytes.NewReader(data)).Decode()
-	if err != nil || len(calendar.Children) != 1 {
-		return event.BadRequestError("one valid calendar component is required", err)
+	if err != nil {
+		return event.BadRequestError("invalid calendar resource", err)
 	}
-	component := calendar.Children[0]
+	component, err := calDAVResourceComponent(calendar)
+	if err != nil {
+		return event.BadRequestError(err.Error(), nil)
+	}
 	var collection string
 	switch component.Name {
 	case ical.CompEvent:
@@ -358,10 +385,10 @@ func calDAVPut(event *core.RequestEvent, user *core.Record) error {
 	requestedHref := path.resourceName
 	requestedCreate := path.kind == "new-resource"
 	var saved *core.Record
-	created := requestedCreate
+	var existing *core.Record
+	var created bool
 	err = event.App.RunInTransaction(func(txApp core.App) error {
 		created = requestedCreate
-		var existing *core.Record
 		if created && requestedHref != "" {
 			matches, findErr := txApp.FindRecordsByFilter(collection, "owner = {:owner} && dav_href = {:href}", "", 1, 0, dbx.Params{"owner": user.Id, "href": requestedHref})
 			if findErr != nil {
@@ -403,24 +430,22 @@ func calDAVPut(event *core.RequestEvent, user *core.Record) error {
 			return calDAVPutFailure{conflict: true, message: "UID already exists"}
 		}
 		if collection == "events" {
-			err = saveImportedEvent(txApp, user.Id, path.calendarID, component)
+			err = saveImportedEventForDAV(txApp, user.Id, path.calendarID, component, existing, requestedHref)
 		} else {
-			err = saveImportedTodo(txApp, user.Id, path.calendarID, component)
+			err = saveImportedTodoForDAV(txApp, user.Id, path.calendarID, component, existing, requestedHref)
 		}
 		if err != nil {
 			return calDAVPutFailure{status: http.StatusBadRequest, message: "invalid calendar component: " + err.Error()}
 		}
-		records, findErr := txApp.FindRecordsByFilter(collection, "owner = {:owner} && uid = {:uid}", "", 2, 0, dbx.Params{"owner": user.Id, "uid": uid})
+		if existing != nil {
+			saved = existing
+			return nil
+		}
+		records, findErr := txApp.FindRecordsByFilter(collection, "owner = {:owner} && dav_href = {:href}", "", 1, 0, dbx.Params{"owner": user.Id, "href": requestedHref})
 		if findErr != nil || len(records) != 1 {
 			return fmt.Errorf("saved calendar resource cannot be resolved")
 		}
 		saved = records[0]
-		if requestedHref != "" && requestedCreate {
-			saved.Set("dav_href", requestedHref)
-			if err := txApp.Save(saved); err != nil {
-				return err
-			}
-		}
 		return nil
 	})
 	if err != nil {
@@ -463,7 +488,25 @@ func calDAVDelete(event *core.RequestEvent, user *core.Record) error {
 	if status := checkCalDAVPreconditions(event.Request.Header, true, resource.etag); status != 0 {
 		return event.NoContent(status)
 	}
-	if err := event.App.Delete(resource.record); err != nil {
+	err = event.App.RunInTransaction(func(txApp core.App) error {
+		if resource.kind == "events" && resource.record.GetString("recurrence_parent") == "" {
+			overrides, findErr := txApp.FindRecordsByFilter("events", "recurrence_parent = {:parent}", "id", 0, 0, dbx.Params{"parent": resource.record.Id})
+			if findErr != nil {
+				return findErr
+			}
+			for _, override := range overrides {
+				if deleteErr := txApp.Delete(override); deleteErr != nil {
+					return deleteErr
+				}
+			}
+		}
+		record, findErr := txApp.FindRecordById(resource.kind, resource.record.Id)
+		if findErr != nil {
+			return findErr
+		}
+		return txApp.Delete(record)
+	})
+	if err != nil {
 		return err
 	}
 	return event.NoContent(http.StatusNoContent)
@@ -525,6 +568,9 @@ func calDAVSyncCollection(event *core.RequestEvent, user *core.Record, path calD
 		changes, err := calDAVChangesSince(event.App, user.Id, path.calendarID, token, maxCalDAVQueryResults+1)
 		if err != nil {
 			return err
+		}
+		if len(changes) > maxCalDAVQueryResults {
+			return event.Blob(http.StatusInsufficientStorage, "application/xml; charset=utf-8", []byte(`<d:error xmlns:d="DAV:"><d:number-of-matches-within-limits/></d:error>`))
 		}
 		latest := make(map[string]*core.Record)
 		for _, change := range changes {
@@ -705,12 +751,16 @@ func ownedCalendar(app core.App, userID, calendarID string) (*core.Record, error
 
 func calendarResources(app core.App, userID, calendarID string, limit int) ([]calDAVResource, error) {
 	result := make([]calDAVResource, 0, limit)
-	for _, definition := range []struct{ collection, field string }{{"events", "calendar"}, {"todos", "list"}} {
+	for _, definition := range []struct{ collection, field string }{{"events", "calendar"}, {"todos", "calendar"}} {
 		remaining := limit - len(result)
 		if remaining <= 0 {
 			break
 		}
-		records, err := app.FindRecordsByFilter(definition.collection, "owner = {:owner} && "+definition.field+" = {:calendar}", "id", remaining, 0, dbx.Params{"owner": userID, "calendar": calendarID})
+		filter := "owner = {:owner} && calendar = {:calendar}"
+		if definition.collection == "todos" {
+			filter = "owner = {:owner} && (calendar = {:calendar} || (calendar = '' && list = {:calendar}))"
+		}
+		records, err := app.FindRecordsByFilter(definition.collection, filter, "id", remaining, 0, dbx.Params{"owner": userID, "calendar": calendarID})
 		if err != nil {
 			return nil, err
 		}
@@ -751,6 +801,9 @@ func findCalDAVResource(app core.App, userID string, path calDAVPath) (calDAVRes
 func resourceCalendarID(record *core.Record, kind string) string {
 	if kind == "events" {
 		return record.GetString("calendar")
+	}
+	if calendarID := record.GetString("calendar"); calendarID != "" {
+		return calendarID
 	}
 	return record.GetString("list")
 }

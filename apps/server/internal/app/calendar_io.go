@@ -76,6 +76,10 @@ func importCalendar(event *core.RequestEvent) error {
 // Duplicate policy: an import updates the record with the same owner, component
 // type, and UID. UIDs owned by another user or used by another type are distinct.
 func saveImportedEvent(app core.App, userID, calendarID string, component *ical.Component) error {
+	return saveImportedEventForDAV(app, userID, calendarID, component, nil, "")
+}
+
+func saveImportedEventForDAV(app core.App, userID, calendarID string, component *ical.Component, preferred *core.Record, davHref string) error {
 	if err := validateImportCalendar(app, userID, calendarID); err != nil {
 		return err
 	}
@@ -93,7 +97,9 @@ func saveImportedEvent(app core.App, userID, calendarID string, component *ical.
 	}
 
 	var record *core.Record
-	if recurrenceProp := component.Props.Get(ical.PropRecurrenceID); recurrenceProp != nil {
+	if preferred != nil {
+		record = preferred
+	} else if recurrenceProp := component.Props.Get(ical.PropRecurrenceID); recurrenceProp != nil {
 		recurrenceTime, err := recurrenceProp.DateTime(time.Local)
 		if err != nil {
 			return fmt.Errorf("VEVENT %q has invalid RECURRENCE-ID: %w", uid, err)
@@ -135,26 +141,51 @@ func saveImportedEvent(app core.App, userID, calendarID string, component *ical.
 		record.Set("recurrence_cancelled", strings.EqualFold(calendarText(component, ical.PropStatus), "CANCELLED"))
 	}
 	record.Set("duration", calendarRaw(component, ical.PropDuration))
+	if davHref != "" {
+		record.Set("dav_href", davHref)
+	}
 	return app.Save(record)
 }
 
 func saveImportedTodo(app core.App, userID, listID string, component *ical.Component) error {
-	if err := validateImportList(app, userID, listID); err != nil {
-		// CalDAV exposes VTODOs below a calendar URI, so its virtual target is
-		// intentionally accepted here. The HTTP import route supplies a list ID.
-		if calendarErr := validateImportCalendar(app, userID, listID); calendarErr != nil {
+	return saveImportedTodoForTarget(app, userID, "list", listID, component, nil, "")
+}
+
+func saveImportedTodoForDAV(app core.App, userID, calendarID string, component *ical.Component, preferred *core.Record, davHref string) error {
+	return saveImportedTodoForTarget(app, userID, "calendar", calendarID, component, preferred, davHref)
+}
+
+func saveImportedTodoForTarget(app core.App, userID, targetField, targetID string, component *ical.Component, preferred *core.Record, davHref string) error {
+	if targetField == "list" {
+		if err := validateImportList(app, userID, targetID); err != nil {
 			return err
 		}
+	} else if err := validateImportCalendar(app, userID, targetID); err != nil {
+		return err
 	}
 	uid, err := validateImportedComponent(component, ical.CompToDo)
 	if err != nil {
 		return err
 	}
-	record, err := importedRecord(app, "todos", userID, uid)
-	if err != nil {
-		return err
+	var record *core.Record
+	if preferred != nil {
+		record = preferred
+	} else {
+		record, err = importedRecord(app, "todos", userID, uid)
+		if err != nil {
+			return err
+		}
 	}
-	record.Set("list", listID)
+	record.Set(targetField, targetID)
+	if targetField == "calendar" && record.GetString("list") == "" {
+		lists, findErr := app.FindRecordsByFilter("lists", "owner = {:owner} && is_default = true", "", 1, 0, dbx.Params{"owner": userID})
+		if findErr != nil {
+			return findErr
+		}
+		if len(lists) == 1 {
+			record.Set("list", lists[0].Id)
+		}
+	}
 	setCommonImportedFields(record, component)
 
 	for _, item := range []struct {
@@ -192,6 +223,9 @@ func saveImportedTodo(app core.App, userID, listID string, component *ical.Compo
 	record.Set("percent_complete", calendarRaw(component, ical.PropPercentComplete))
 	record.Set("priority", calendarRaw(component, ical.PropPriority))
 	record.Set("completed", component.Props.Get(ical.PropCompleted) != nil || strings.EqualFold(calendarText(component, ical.PropStatus), "COMPLETED"))
+	if davHref != "" {
+		record.Set("dav_href", davHref)
+	}
 	return app.Save(record)
 }
 
@@ -295,7 +329,11 @@ func importedRecord(app core.App, collectionName, userID, uid string) (*core.Rec
 }
 
 func setCommonImportedFields(record *core.Record, component *ical.Component) {
-	record.Set("title", calendarText(component, ical.PropSummary))
+	title := strings.TrimSpace(calendarText(component, ical.PropSummary))
+	if title == "" {
+		title = strings.TrimSpace(calendarText(component, ical.PropUID))
+	}
+	record.Set("title", title)
 	record.Set("description", calendarText(component, ical.PropDescription))
 	record.Set("status", calendarText(component, ical.PropStatus))
 	record.Set("rrule", calendarRaw(component, ical.PropRecurrenceRule))
@@ -344,11 +382,22 @@ func buildCalendarExport(app core.App, userID, calendarID string) (*ical.Calenda
 	if err != nil {
 		return nil, err
 	}
+	todos, err := app.FindRecordsByFilter("todos", "owner = {:owner} && (calendar = {:calendar} || (calendar = '' && list = {:calendar}))", "due_date", 0, 0, dbx.Params{"owner": userID, "calendar": calendarID})
+	if err != nil {
+		return nil, err
+	}
 	output := ical.NewCalendar()
 	output.Props.SetText(ical.PropVersion, "2.0")
 	output.Props.SetText(ical.PropProductID, "-//Taskboard//Calendar//EN")
 	for _, record := range events {
 		component, err := exportEvent(record)
+		if err != nil {
+			return nil, err
+		}
+		output.Children = append(output.Children, component)
+	}
+	for _, record := range todos {
+		component, err := exportTodo(record)
 		if err != nil {
 			return nil, err
 		}

@@ -10,6 +10,23 @@ import (
 	ical "github.com/emersion/go-ical"
 )
 
+func TestCalDAVResourceComponentAcceptsTimezoneWrapper(t *testing.T) {
+	calendar := ical.NewCalendar()
+	calendar.Children = append(calendar.Children, ical.NewComponent("VTIMEZONE"), ical.NewComponent(ical.CompEvent))
+	component, err := calDAVResourceComponent(calendar)
+	if err != nil || component == nil || component.Name != ical.CompEvent {
+		t.Fatalf("component = %#v, error = %v", component, err)
+	}
+}
+
+func TestCalDAVResourceComponentRejectsMultipleResources(t *testing.T) {
+	calendar := ical.NewCalendar()
+	calendar.Children = append(calendar.Children, ical.NewComponent(ical.CompEvent), ical.NewComponent(ical.CompToDo))
+	if _, err := calDAVResourceComponent(calendar); err == nil {
+		t.Fatal("expected multiple resource components to be rejected")
+	}
+}
+
 func TestParseCalDAVPath(t *testing.T) {
 	tests := []struct {
 		path       string

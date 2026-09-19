@@ -142,6 +142,40 @@ func TestCalendarTemporalValuesRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCalDAVTodoCalendarRoundTrip(t *testing.T) {
+	testApp, user, calendar := newCalendarTestApp(t)
+	defer testApp.Cleanup()
+	component := decodeCalendar(t, "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\nBEGIN:VTODO\r\nUID:dav-task@example.com\r\nDTSTAMP:20260912T120000Z\r\nDUE:20260914T170000Z\r\nSUMMARY:CalDAV task\r\nEND:VTODO\r\nEND:VCALENDAR\r\n").Children[0]
+	if err := saveImportedTodoForDAV(testApp, user.Id, calendar.Id, component, nil, "client-task.ics"); err != nil {
+		t.Fatal(err)
+	}
+	records := findOwnedUID(t, testApp, "todos", user.Id, "dav-task@example.com")
+	if len(records) != 1 || records[0].GetString("calendar") != calendar.Id {
+		t.Fatalf("CalDAV task target was not saved: %#v", records)
+	}
+	resources, err := calendarResources(testApp, user.Id, calendar.Id, maxCalDAVQueryResults)
+	if err != nil || len(resources) != 1 || resources[0].kind != "todos" {
+		t.Fatalf("CalDAV task resources = %#v, %v", resources, err)
+	}
+	output := exportedCalendar(t, testApp, user.Id, calendar.Id)
+	if len(output.Children) != 1 || output.Children[0].Name != ical.CompToDo {
+		t.Fatalf("CalDAV task export = %#v", output.Children)
+	}
+}
+
+func TestCalendarImportUsesUIDWhenSummaryIsMissing(t *testing.T) {
+	testApp, user, calendar := newCalendarTestApp(t)
+	defer testApp.Cleanup()
+	component := decodeCalendar(t, "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\nBEGIN:VEVENT\r\nUID:no-summary@example.com\r\nDTSTAMP:20260912T120000Z\r\nDTSTART:20260913T090000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n").Children[0]
+	if err := saveImportedEvent(testApp, user.Id, calendar.Id, component); err != nil {
+		t.Fatal(err)
+	}
+	records := findOwnedUID(t, testApp, "events", user.Id, "no-summary@example.com")
+	if len(records) != 1 || records[0].GetString("title") != "no-summary@example.com" {
+		t.Fatalf("fallback title = %#v", records)
+	}
+}
+
 func TestCalendarTodoImportExport(t *testing.T) {
 	testApp, user, _ := newCalendarTestApp(t)
 	defer testApp.Cleanup()

@@ -143,6 +143,21 @@ export function CalendarTab({
     setSelectedDate(nextDate);
   };
 
+  const jumpToToday = () => {
+    setSelectedDate(today);
+    setTodayVisible(true);
+    requestAnimationFrame(() => {
+      const container = scrollRef.current;
+      const page = pageRefs.current[pageRadius];
+      if (!container || !page) return;
+      if (view === 'month') {
+        container.scrollTop = page.offsetTop - (container.clientHeight - page.offsetHeight) / 2;
+      } else {
+        container.scrollLeft = page.offsetLeft - (container.clientWidth - page.offsetWidth) / 2;
+      }
+    });
+  };
+
   return (
     <div className="calendar-page">
       <header className="page-header">
@@ -169,24 +184,12 @@ export function CalendarTab({
         <div className="header-actions">
           {!todayVisible && (
             <button
+              type="button"
               className="button button-quiet calendar-today-button"
-              onClick={() => {
-                setSelectedDate(today);
-                requestAnimationFrame(() => {
-                  const container = scrollRef.current;
-                  const page = pageRefs.current[pageRadius];
-                  if (!container || !page) return;
-                  if (view === 'month') {
-                    container.scrollTop =
-                      page.offsetTop - (container.clientHeight - page.offsetHeight) / 2;
-                  } else {
-                    container.scrollLeft =
-                      page.offsetLeft - (container.clientWidth - page.offsetWidth) / 2;
-                  }
-                });
-              }}
+              aria-label="Jump to today"
+              onClick={jumpToToday}
             >
-              Today
+              Jump to today
             </button>
           )}
           <div className="filter-wrap">

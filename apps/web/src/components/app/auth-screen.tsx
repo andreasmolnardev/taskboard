@@ -13,6 +13,22 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
   const [registrationMode, setRegistrationMode] = useState<'disabled' | 'approval' | 'otp'>(
     'approval',
   );
+  const [ssoProviders, setSsoProviders] = useState<{ name: string; displayName: string }[]>([]);
+  const [ssoBusy, setSsoBusy] = useState(false);
+  useEffect(() => {
+    if (mode !== 'login') return;
+    void pb
+      .collection('users')
+      .listAuthMethods()
+      .then((methods) => {
+        if (methods.oauth2.enabled) {
+          setSsoProviders(
+            methods.oauth2.providers.map(({ name, displayName }) => ({ name, displayName })),
+          );
+        }
+      })
+      .catch(() => setSsoProviders([]));
+  }, [mode]);
   useEffect(() => {
     if (mode !== 'register') return;
     void apiFetch('/api/auth/registration-policy')
@@ -20,6 +36,17 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
       .then((policy: { mode: 'disabled' | 'approval' | 'otp' }) => setRegistrationMode(policy.mode))
       .catch(() => setError('Could not load registration settings.'));
   }, [mode]);
+  const handleSso = async (provider: string) => {
+    setSsoBusy(true);
+    setError('');
+    try {
+      await pb.collection('users').authWithOAuth2({ provider });
+    } catch {
+      setError('Could not sign in with SSO. Try again.');
+    } finally {
+      setSsoBusy(false);
+    }
+  };
   const handleGuestAuth = async () => {
     setBusy(true);
     setError('');
@@ -29,7 +56,12 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
       if (!response.ok) throw new Error('Guest authentication failed');
       const result: {
         token: string;
-        record: { id: string; collectionId: string; collectionName: string; [key: string]: unknown };
+        record: {
+          id: string;
+          collectionId: string;
+          collectionName: string;
+          [key: string]: unknown;
+        };
       } = await response.json();
       pb.authStore.save(result.token, result.record);
     } catch {
@@ -101,7 +133,7 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
         )}
         {error && <div className="auth-error">{error}</div>}
         {!disabled && (
-          <button className="button button-primary auth-submit" disabled={busy}>
+          <button className="button button-primary auth-submit" disabled={busy || ssoBusy}>
             {busy
               ? mode === 'register'
                 ? 'Creating account…'
@@ -110,6 +142,22 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
                 ? 'Create account'
                 : 'Sign in'}
           </button>
+        )}
+        {mode === 'login' && ssoProviders.length > 0 && (
+          <div className="sso-options">
+            <div className="sso-divider">or</div>
+            {ssoProviders.map((provider) => (
+              <button
+                key={provider.name}
+                type="button"
+                className="button auth-sso"
+                disabled={busy || ssoBusy}
+                onClick={() => void handleSso(provider.name)}
+              >
+                {ssoBusy ? 'Opening SSO…' : `Sign in with ${provider.displayName}`}
+              </button>
+            ))}
+          </div>
         )}
         <p className="auth-switch">
           {mode === 'register' ? 'Already have an account?' : 'Need an account?'}{' '}

@@ -29,6 +29,8 @@ import {
 
 type SettingsSection = 'appearance' | 'account' | 'calendar' | 'dev';
 type AccountModal = 'email' | 'password' | null;
+type SsoProvider = { name: string; displayName: string };
+type LinkedSsoAccount = { id: string; provider: string };
 const settingsSections: SettingsSection[] = import.meta.env.DEV
   ? ['appearance', 'account', 'calendar', 'dev']
   : ['appearance', 'account', 'calendar'];
@@ -67,6 +69,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [accountModal, setAccountModal] = useState<AccountModal>(null);
+  const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
+  const [linkedSsoAccounts, setLinkedSsoAccounts] = useState<LinkedSsoAccount[]>([]);
+  const [ssoBusy, setSsoBusy] = useState<string | null>(null);
+  const [ssoError, setSsoError] = useState('');
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [devSeedBusy, setDevSeedBusy] = useState(false);
   const [devSeedMessage, setDevSeedMessage] = useState('');
@@ -103,6 +109,58 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       .then(setAppPasswords)
       .catch(() => setAppPasswordError('Could not load app passwords.'));
   }, []);
+
+  const loadSsoAccounts = async () => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return;
+    const [methods, accounts] = await Promise.all([
+      pb.collection('users').listAuthMethods(),
+      pb.collection('users').listExternalAuths(userId),
+    ]);
+    setSsoProviders(
+      methods.oauth2.enabled
+        ? methods.oauth2.providers.map(({ name, displayName }) => ({ name, displayName }))
+        : [],
+    );
+    setLinkedSsoAccounts(accounts.map(({ id, provider }) => ({ id, provider })));
+  };
+
+  useEffect(() => {
+    void loadSsoAccounts().catch(() => {
+      setSsoProviders([]);
+      setSsoError('Could not load SSO accounts.');
+    });
+  }, []);
+
+  const linkSso = async (provider: SsoProvider) => {
+    setSsoBusy(provider.name);
+    setSsoError('');
+    try {
+      await pb.collection('users').authWithOAuth2({ provider: provider.name });
+      await loadSsoAccounts();
+    } catch {
+      setSsoError(`Could not link ${provider.displayName}. Try again.`);
+    } finally {
+      setSsoBusy(null);
+    }
+  };
+
+  const unlinkSso = async (provider: SsoProvider) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return;
+    setSsoBusy(provider.name);
+    setSsoError('');
+    try {
+      await pb.collection('users').unlinkExternalAuth(userId, provider.name);
+      setLinkedSsoAccounts((accounts) =>
+        accounts.filter((account) => account.provider !== provider.name),
+      );
+    } catch {
+      setSsoError(`Could not unlink ${provider.displayName}. Try again.`);
+    } finally {
+      setSsoBusy(null);
+    }
+  };
 
   const createAppPassword = async () => {
     setAppPasswordBusy(true);
@@ -561,7 +619,11 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
               </button>
             </div>
             <div className="account-actions">
-              <button className="account-action" type="button" onClick={() => setAccountModal('email')}>
+              <button
+                className="account-action"
+                type="button"
+                onClick={() => setAccountModal('email')}
+              >
                 <span>
                   <strong>Change email</strong>
                   <small>We will send a confirmation link to your new address.</small>
@@ -580,6 +642,44 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 <ChevronRight size={18} aria-hidden="true" />
               </button>
             </div>
+            {ssoProviders.length > 0 && (
+              <div className="account-sso">
+                <div>
+                  <h2>Single sign-on</h2>
+                  <p>Link a work or personal SSO account for faster sign-in.</p>
+                </div>
+                <div className="sso-account-list">
+                  {ssoProviders.map((provider) => {
+                    const linked = linkedSsoAccounts.some(
+                      (account) => account.provider === provider.name,
+                    );
+                    return (
+                      <div className="sso-account-row" key={provider.name}>
+                        <span>
+                          <strong>{provider.displayName}</strong>
+                          <small>{linked ? 'Linked' : 'Not linked'}</small>
+                        </span>
+                        <button
+                          className="button button-quiet"
+                          type="button"
+                          disabled={ssoBusy !== null}
+                          onClick={() => void (linked ? unlinkSso(provider) : linkSso(provider))}
+                        >
+                          {ssoBusy === provider.name
+                            ? linked
+                              ? 'Unlinking…'
+                              : 'Opening SSO…'
+                            : linked
+                              ? 'Unlink'
+                              : `Link ${provider.displayName}`}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                {ssoError && <p className="error-text">{ssoError}</p>}
+              </div>
+            )}
           </div>
         )}
         {activeSection === 'calendar' && (

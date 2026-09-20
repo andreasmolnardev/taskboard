@@ -111,6 +111,29 @@ button {
   justify-content: center;
   margin-top: 4px;
 }
+.sso-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sso-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.sso-divider::before,
+.sso-divider::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+}
+.auth-sso {
+  justify-content: center;
+}
 .auth-switch {
   color: var(--muted);
   font-size: 12px;
@@ -1177,6 +1200,40 @@ kbd {
 .account-action:focus-visible svg {
   color: var(--foreground);
   transform: translateX(2px);
+}
+.account-sso {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.sso-account-list {
+  display: flex;
+  flex-direction: column;
+}
+.sso-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.sso-account-row:last-child {
+  border-bottom: 0;
+}
+.sso-account-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sso-account-row strong {
+  font-size: 13px;
+}
+.sso-account-row small {
+  color: var(--muted);
+  font-size: 12px;
 }
 .account-form {
   display: flex;

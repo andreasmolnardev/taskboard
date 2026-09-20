@@ -2,6 +2,7 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   CalendarDays,
   ChevronRight,
+  Database,
   Monitor,
   Moon,
   Palette,
@@ -26,9 +27,11 @@ import {
   type WeekStart,
 } from '../../data';
 
-type SettingsSection = 'appearance' | 'account' | 'calendar';
+type SettingsSection = 'appearance' | 'account' | 'calendar' | 'dev';
 type AccountModal = 'email' | 'password' | null;
-const settingsSections: SettingsSection[] = ['appearance', 'account', 'calendar'];
+const settingsSections: SettingsSection[] = import.meta.env.DEV
+  ? ['appearance', 'account', 'calendar', 'dev']
+  : ['appearance', 'account', 'calendar'];
 
 export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const { theme, setTheme } = useTheme();
@@ -65,6 +68,9 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [passwordError, setPasswordError] = useState('');
   const [accountModal, setAccountModal] = useState<AccountModal>(null);
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
+  const [devSeedBusy, setDevSeedBusy] = useState(false);
+  const [devSeedMessage, setDevSeedMessage] = useState('');
+  const [devSeedError, setDevSeedError] = useState('');
   const visibilityStorageKey = `taskboard-hidden-containers-${userId}`;
   const [hiddenContainerIds, setHiddenContainerIds] = useState<string[]>(() => {
     try {
@@ -274,6 +280,146 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     onChanged?.();
   };
 
+  const loadDevDefaults = async () => {
+    if (!import.meta.env.DEV || devSeedBusy) return;
+    const owner = pb.authStore.record?.id;
+    if (!owner) return;
+    setDevSeedBusy(true);
+    setDevSeedMessage('');
+    setDevSeedError('');
+    try {
+      const findOrCreate = async (
+        collection: string,
+        name: string,
+        values: Record<string, unknown>,
+      ) => {
+        const records = await pb
+          .collection(collection)
+          .getFullList<{ id: string; name?: string; title?: string }>({
+            filter: `owner = "${owner}"`,
+          });
+        const existing = records.find((record) => (record.name ?? record.title) === name);
+        if (existing) return existing;
+        return pb.collection(collection).create(values);
+      };
+      const devList = await findOrCreate('lists', 'Dev Tasks', {
+        owner,
+        name: 'Dev Tasks',
+        description: 'Tasks loaded by the development data tool.',
+        color: '#87c4a8',
+      });
+      const devListTwo = await findOrCreate('lists', 'Dev Errands', {
+        owner,
+        name: 'Dev Errands',
+        description: 'More sample tasks for development.',
+        color: '#c66b32',
+      });
+      const devCalendar = await findOrCreate('calendars', 'Dev Events', {
+        owner,
+        name: 'Dev Events',
+        description: 'Events loaded by the development data tool.',
+        color: '#3b6ea8',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      const devCalendarTwo = await findOrCreate('calendars', 'Dev Plans', {
+        owner,
+        name: 'Dev Plans',
+        description: 'More sample events for development.',
+        color: '#7657a8',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      const addressBook = await findOrCreate('address_books', 'Dev Contacts', {
+        owner,
+        name: 'Dev Contacts',
+        description: 'Contacts loaded by the development data tool.',
+        color: '#7657a8',
+      });
+
+      const contacts = [
+        ['Ada Lovelace', 'ada@example.test', '+1 555 0101'],
+        ['Grace Hopper', 'grace@example.test', '+1 555 0102'],
+        ['Linus Torvalds', 'linus@example.test', '+1 555 0103'],
+        ['Margaret Hamilton', 'margaret@example.test', '+1 555 0104'],
+      ];
+      const existingContacts = await pb
+        .collection('contacts')
+        .getFullList<{ formatted_name: string }>({
+          filter: `owner = "${owner}"`,
+        });
+      for (const [formattedName, email, phone] of contacts) {
+        if (existingContacts.some((contact) => contact.formatted_name === formattedName)) continue;
+        await pb.collection('contacts').create({
+          owner,
+          address_book: addressBook.id,
+          uid: crypto.randomUUID(),
+          formatted_name: formattedName,
+          given_name: formattedName.split(' ')[0],
+          family_name: formattedName.split(' ').slice(1).join(' '),
+          email,
+          phone,
+        });
+      }
+
+      const existingEvents = await pb
+        .collection('events')
+        .getFullList<{ title: string }>({ filter: `owner = "${owner}"` });
+      const existingTodos = await pb
+        .collection('todos')
+        .getFullList<{ title: string }>({ filter: `owner = "${owner}"` });
+      const start = new Date();
+      start.setDate(start.getDate() + 1);
+      start.setHours(9, 0, 0, 0);
+      for (let index = 0; index < 10; index += 1) {
+        const date = new Date(start);
+        date.setDate(start.getDate() + index * 2);
+        const iso = date.toISOString();
+        const title = `Dev ${index % 2 === 0 ? 'event' : 'todo'} ${index + 1}`;
+        if (index % 2 === 0) {
+          if (existingEvents.some((event) => event.title === title)) continue;
+          const end = new Date(date.getTime() + 60 * 60 * 1000);
+          await pb.collection('events').create({
+            owner,
+            title,
+            description: 'Sample event loaded by the development data tool.',
+            uid: crypto.randomUUID(),
+            dtstamp: new Date().toISOString(),
+            start_date: iso,
+            start_local: iso.slice(0, 16),
+            end_date: end.toISOString(),
+            end_local: end.toISOString().slice(0, 16),
+            calendar: index % 4 === 0 ? devCalendar.id : devCalendarTwo.id,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            time_mode: 'zoned',
+          });
+        } else {
+          if (existingTodos.some((todo) => todo.title === title)) continue;
+          await pb.collection('todos').create({
+            owner,
+            title,
+            description: 'Sample todo loaded by the development data tool.',
+            uid: crypto.randomUUID(),
+            dtstamp: new Date().toISOString(),
+            start_date: iso,
+            due_date: iso,
+            start_local: iso.slice(0, 16),
+            due_local: iso.slice(0, 16),
+            list: index % 4 === 1 ? devList.id : devListTwo.id,
+            completed: false,
+            status: 'NEEDS-ACTION',
+            time_mode: 'zoned',
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          });
+        }
+      }
+      setDevSeedMessage('Defaults loaded for the next three weeks.');
+      onChanged?.();
+    } catch {
+      setDevSeedError('Could not load development defaults.');
+    } finally {
+      setDevSeedBusy(false);
+    }
+  };
+
   const exportCalendar = async (id: string, name: string) => {
     setCalendarIOBusy(true);
     setCalendarIOError('');
@@ -317,6 +463,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
+          {import.meta.env.DEV && <TabsTrigger value="dev">Dev</TabsTrigger>}
         </TabsList>
       </Tabs>
       <section className="settings-card">
@@ -572,6 +719,36 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
               </span>
             </div>
           </>
+        )}
+        {import.meta.env.DEV && activeSection === 'dev' && (
+          <div className="settings-section">
+            <div>
+              <h2>Development data</h2>
+              <p>
+                Create sample contacts, calendars, lists, events, and todos dated over the next
+                three weeks.
+              </p>
+            </div>
+            <div>
+              <button
+                className="button button-primary"
+                onClick={() => void loadDevDefaults()}
+                disabled={devSeedBusy}
+              >
+                <Database size={16} /> {devSeedBusy ? 'Loading…' : 'Load defaults'}
+              </button>
+              {devSeedMessage && (
+                <p className="form-message" role="status">
+                  {devSeedMessage}
+                </p>
+              )}
+              {devSeedError && (
+                <p className="form-error" role="alert">
+                  {devSeedError}
+                </p>
+              )}
+            </div>
+          </div>
         )}
       </section>
       {accountModal && (

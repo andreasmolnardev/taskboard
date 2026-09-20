@@ -164,9 +164,24 @@ export function CreateComposer({
     delete entryForm.recurrence_id;
     delete entryForm.repeat;
     const allDay = type === 'event' && Boolean(form.all_day);
-    const start = localToRecord(String(form.start_local ?? form.start_date ?? ''), allDay);
-    const end = localToRecord(String(form.end_local ?? form.end_date ?? ''), allDay);
-    const due = localToRecord(String(form.due_local ?? form.due_date ?? ''), false);
+    const startInput = String(form.start_local ?? form.start_date ?? '').trim();
+    const endInput = String(form.end_local ?? form.end_date ?? '').trim();
+    const dueInput = String(form.due_local ?? form.due_date ?? '').trim();
+    const start = localToRecord(startInput, allDay);
+    const end = localToRecord(endInput, allDay);
+    const due = localToRecord(dueInput, false);
+    if ((type === 'event' && startInput && !start.index) || (type === 'task' && dueInput && !due.index)) {
+      set('error', 'Enter a valid date and time.');
+      return;
+    }
+    if (type === 'event' && endInput && !end.index) {
+      set('error', 'Enter a valid end date and time.');
+      return;
+    }
+    if (type === 'event' && start.index && end.index && end.index <= start.index) {
+      set('error', 'End must be after start.');
+      return;
+    }
     const values =
       type === 'list' || type === 'calendar'
         ? {
@@ -284,10 +299,7 @@ export function CreateComposer({
   };
   const renderExtraFields = (entryType: string) => (
     <div className="ical-fields">
-      <label>
-        UID
-        <input value={String(form.uid ?? '')} onChange={(e) => set('uid', e.target.value)} />
-      </label>
+
       {editing?.masterId && entryType === 'event' && (
         <label>
           Edit scope
@@ -340,18 +352,7 @@ export function CreateComposer({
           />
         </label>
       )}
-      {entryType === 'task' && (
-        <label>
-          Completed at
-          <input
-            type="datetime-local"
-            value={String(form.completed_at ?? '').slice(0, 16)}
-            onChange={(e) =>
-              set('completed_at', e.target.value ? new Date(e.target.value).toISOString() : '')
-            }
-          />
-        </label>
-      )}
+
       <label>
         {entryType === 'task' ? 'List' : 'Calendar'}
         <select
@@ -472,7 +473,10 @@ export function CreateComposer({
                 setDescription={(value) => set('description', value)}
                 placeholder={entryType === 'task' ? 'What needs doing?' : 'What is happening?'}
               />
-              {renderExtraFields(entryType)}
+              <details className="advanced-options">
+                <summary>Advanced options</summary>
+                {renderExtraFields(entryType)}
+              </details>
             </TabsContent>
           ))}
           <TabsContent value="list">

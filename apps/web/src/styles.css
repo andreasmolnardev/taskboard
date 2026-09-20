@@ -76,6 +76,7 @@ button {
   box-shadow: var(--shadow);
 }
 .auth-card .sidebar-brand {
+  align-self: center;
   margin: 0 0 8px;
 }
 .auth-card h1 {
@@ -692,13 +693,38 @@ h3 {
   margin-top: 8px;
 }
 .full-month-entry {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
   overflow: hidden;
-  padding: 4px 6px;
+  padding: 2px 4px;
   border-radius: 4px;
-  color: white;
   font-size: 11px;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+.full-month-entry.is-all-day-event {
+  padding: 4px 6px;
+  color: white;
+}
+.full-month-entry-icon,
+.full-month-entry-dot {
+  flex: 0 0 auto;
+}
+.full-month-entry-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.full-month-entry-time {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.full-month-entry-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .calendar-today-button {
   white-space: nowrap;
@@ -1453,11 +1479,24 @@ footer .sync-dot {
   font-size: 12px;
   padding: 7px 9px;
 }
+.advanced-options {
+  margin-top: 12px;
+}
+.advanced-options summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 0;
+}
+.advanced-options summary:hover {
+  color: var(--foreground);
+}
 .ical-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px 16px;
-  margin-top: 18px;
+  margin-top: 10px;
 }
 .ical-fields label {
   display: flex;

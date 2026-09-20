@@ -1,5 +1,21 @@
 import { Fragment } from 'react';
-import { entries, formatDateKey, getWeekStart } from '../data';
+import { Square } from 'lucide-react';
+import { entries, formatDateKey, getWeekStart, type Entry } from '../data';
+
+function formatEntryTime(entry: Entry) {
+  const rawValue = entry.type === 'task' ? entry.fields?.due_date : entry.fields?.start_date;
+  const value = String(rawValue ?? '').trim();
+  const time = entry.time || (value.match(/T(\d{2}:\d{2})/)?.[1] ?? '');
+  if (!time) return '';
+
+  const date = new Date(`${entry.date}T${time}:00`);
+  if (Number.isNaN(date.getTime())) return time;
+  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(date);
+}
+
+function isAllDayEvent(entry: Entry) {
+  return entry.type === 'event' && entry.fields?.all_day === true;
+}
 
 function getISOWeekNumber(date: Date) {
   const thursday = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -71,16 +87,44 @@ export function FullMonthCalendar({
               >
                 <span className="full-month-date">{date.getDate()}</span>
                 <div className="full-month-entries">
-                  {dateEntries.map((entry) => (
-                    <div
-                      className="full-month-entry"
-                      key={entry.id}
-                      style={{ backgroundColor: entry.color }}
-                      title={entry.title}
-                    >
-                      {entry.title}
-                    </div>
-                  ))}
+                  {dateEntries.map((entry) => {
+                    const allDay = isAllDayEvent(entry);
+                    const time = formatEntryTime(entry);
+                    return (
+                      <div
+                        className={`full-month-entry ${allDay ? 'is-all-day-event' : `is-${entry.type}`}`}
+                        key={entry.id}
+                        style={allDay ? { backgroundColor: entry.color } : undefined}
+                        title={entry.title}
+                      >
+                        {allDay ? (
+                          <span className="full-month-entry-title">{entry.title}</span>
+                        ) : entry.type === 'task' ? (
+                          <>
+                            <Square
+                              className="full-month-entry-icon"
+                              style={{ color: entry.color }}
+                              size={11}
+                              strokeWidth={2.5}
+                              aria-hidden="true"
+                            />
+                            {time && <span className="full-month-entry-time">{time}</span>}
+                            <span className="full-month-entry-title">{entry.title}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span
+                              className="full-month-entry-dot"
+                              style={{ backgroundColor: entry.color }}
+                              aria-hidden="true"
+                            />
+                            {time && <span className="full-month-entry-time">{time}</span>}
+                            <span className="full-month-entry-title">{entry.title}</span>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </Fragment>

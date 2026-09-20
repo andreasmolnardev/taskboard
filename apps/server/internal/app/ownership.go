@@ -40,6 +40,26 @@ func registerOwnershipHooks(pb *pocketbase.PocketBase) {
 			}
 			return e.Next()
 		})
+		pb.OnRecordDeleteRequest(name).BindFunc(func(e *core.RecordRequestEvent) error {
+			if e.HasSuperuserAuth() {
+				return e.Next()
+			}
+			if e.Auth == nil || e.Record.GetString("owner") != e.Auth.Id {
+				return e.ForbiddenError("record is not owned by the current user", nil)
+			}
+			if name == "events" && e.Record.GetString("recurrence_parent") == "" {
+				overrides, err := e.App.FindRecordsByFilter("events", "owner = {:owner} && recurrence_parent = {:parent}", "id", 0, 0, dbx.Params{"owner": e.Record.GetString("owner"), "parent": e.Record.Id})
+				if err != nil {
+					return err
+				}
+				for _, override := range overrides {
+					if err := e.App.Delete(override); err != nil {
+						return err
+					}
+				}
+			}
+			return e.Next()
+		})
 	}
 
 	registerContactOwnershipHooks(pb)

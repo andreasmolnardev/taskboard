@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,10 +23,11 @@ const (
 )
 
 type occurrenceParams struct {
-	Start    time.Time
-	End      time.Time
-	Timezone *time.Location
-	Max      int
+	Start         time.Time
+	End           time.Time
+	Timezone      *time.Location
+	Max           int
+	RecurringOnly bool
 }
 
 type occurrenceResult struct {
@@ -33,7 +35,12 @@ type occurrenceResult struct {
 	MasterID     string `json:"masterId"`
 	Start        string `json:"start"`
 	End          string `json:"end"`
+	StartLocal   string `json:"startLocal,omitempty"`
+	EndLocal     string `json:"endLocal,omitempty"`
+	Timezone     string `json:"timezone,omitempty"`
+	TimeMode     string `json:"timeMode,omitempty"`
 	AllDay       bool   `json:"allDay"`
+	Recurring    bool   `json:"recurring"`
 	RecurrenceID string `json:"recurrenceId,omitempty"`
 	Title        string `json:"title"`
 	Description  string `json:"description,omitempty"`
@@ -127,6 +134,9 @@ func prepareRecurrenceOverride(app core.App, owner, masterID, rawID string) (*co
 	component, err := occurrenceComponent(master)
 	if err != nil {
 		return nil, nil, err
+	}
+	if !recordHasRecurrence(master) {
+		return nil, nil, fmt.Errorf("event is not recurring")
 	}
 	windowStart, windowEnd := id.Add(-48*time.Hour), id.Add(48*time.Hour)
 	occurrences, err := calendarengine.Expand(component, windowStart, windowEnd, 10000)
@@ -237,7 +247,14 @@ func parseOccurrenceParams(values url.Values) (occurrenceParams, error) {
 			return occurrenceParams{}, fmt.Errorf("timezone must be a valid IANA time zone")
 		}
 	}
-	return occurrenceParams{Start: start, End: end, Timezone: timezone, Max: max}, nil
+	recurringOnly := false
+	if raw := strings.TrimSpace(values.Get("recurringOnly")); raw != "" {
+		recurringOnly, err = strconv.ParseBool(raw)
+		if err != nil {
+			return occurrenceParams{}, fmt.Errorf("recurringOnly must be a boolean")
+		}
+	}
+	return occurrenceParams{Start: start, End: end, Timezone: timezone, Max: max, RecurringOnly: recurringOnly}, nil
 }
 
 func requiredRFC3339(raw, name string) (time.Time, error) {
@@ -268,10 +285,17 @@ func calendarOccurrences(app core.App, owner string, params occurrenceParams) ([
 	items := make([]occurrenceResult, 0, min(params.Max, 64))
 	overrides := make(map[string]map[string]*core.Record)
 	masters := make([]*core.Record, 0, len(events))
+	oneOffs := make([]*core.Record, 0, len(events))
+	masterIDs := make(map[string]struct{}, len(events))
 	for _, record := range events {
 		parent := record.GetString("recurrence_parent")
 		if parent == "" {
-			masters = append(masters, record)
+			if recordHasRecurrence(record) {
+				masters = append(masters, record)
+				masterIDs[record.Id] = struct{}{}
+			} else {
+				oneOffs = append(oneOffs, record)
+			}
 			continue
 		}
 		if overrides[parent] == nil {
@@ -322,6 +346,9 @@ func calendarOccurrences(app core.App, owner string, params occurrenceParams) ([
 	// A moved override can land inside the requested window even when its
 	// original generated occurrence does not. Include those detached records.
 	for parentID, records := range overrides {
+		if _, ok := masterIDs[parentID]; !ok {
+			continue
+		}
 		for key, override := range records {
 			if override.GetBool("recurrence_cancelled") {
 				continue
@@ -352,6 +379,27 @@ func calendarOccurrences(app core.App, owner string, params occurrenceParams) ([
 			}
 		}
 	}
+	// Keep ordinary events available to existing callers, but let the web client
+	// request only recurrence data so unrelated events cannot exhaust its limit.
+	if params.RecurringOnly {
+		oneOffs = nil
+	}
+	for _, record := range oneOffs {
+		component, err := occurrenceComponent(record)
+		if err != nil {
+			continue
+		}
+		expanded, err := calendarengine.Expand(component, params.Start, params.End, 1)
+		if err != nil {
+			continue
+		}
+		for _, occurrence := range expanded {
+			if len(items) >= params.Max {
+				return nil, calendarengine.ErrLimitExceeded
+			}
+			items = append(items, makeOccurrenceResult(record.Id, recurrenceID(occurrence.Start), record, occurrence, params.Timezone, colors))
+		}
+	}
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].Start != items[j].Start {
 			return items[i].Start < items[j].Start
@@ -366,6 +414,17 @@ func calendarOccurrences(app core.App, owner string, params occurrenceParams) ([
 
 func recurrenceID(value time.Time) string { return value.UTC().Format(time.RFC3339Nano) }
 
+func recordHasRecurrence(record *core.Record) bool {
+	if strings.TrimSpace(record.GetString("rrule")) != "" {
+		return true
+	}
+	var stored storedCalendarData
+	if err := json.Unmarshal([]byte(record.GetString("exdate")), &stored); err != nil {
+		return false
+	}
+	return len(stored.Properties[ical.PropRecurrenceDates]) > 0
+}
+
 func makeOccurrenceResult(masterID, id string, record *core.Record, occurrence calendarengine.Occurrence, timezone *time.Location, colors map[string]string) occurrenceResult {
 	start, end := occurrence.Start, occurrence.End
 	// Date-only and floating values represent wall-clock values, not instants.
@@ -373,9 +432,26 @@ func makeOccurrenceResult(masterID, id string, record *core.Record, occurrence c
 	if timezone != nil && !occurrence.AllDay && record.GetString("time_mode") != "floating" {
 		start, end = start.In(timezone), end.In(timezone)
 	}
+	localZone := start.Location()
+	if timezone != nil && !occurrence.AllDay {
+		localZone = timezone
+	}
+	startLocal, endLocal := start.In(localZone), end.In(localZone)
+	localFormat := "20060102T150405"
+	if occurrence.AllDay {
+		localFormat = "20060102"
+	}
 	return occurrenceResult{
 		ID: masterID + ":" + id, MasterID: masterID, RecurrenceID: id,
-		Start: start.Format(time.RFC3339), End: end.Format(time.RFC3339), AllDay: occurrence.AllDay,
+		Start: start.Format(time.RFC3339), End: end.Format(time.RFC3339),
+		StartLocal: startLocal.Format(localFormat), EndLocal: endLocal.Format(localFormat),
+		Timezone: func() string {
+			if timezone != nil && !occurrence.AllDay {
+				return timezone.String()
+			}
+			return record.GetString("timezone")
+		}(),
+		TimeMode: record.GetString("time_mode"), AllDay: occurrence.AllDay, Recurring: recordHasRecurrence(record),
 		Title: record.GetString("title"), Description: record.GetString("description"),
 		Calendar: record.GetString("calendar"), Color: colors[record.GetString("calendar")],
 	}

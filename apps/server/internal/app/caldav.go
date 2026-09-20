@@ -672,7 +672,7 @@ func filterCalDAVResources(resources []calDAVResource, filters []calDAVComponent
 			continue
 		}
 		if component.TimeRange != nil {
-			if resource.kind == "events" && resource.record.GetString("rrule") != "" && startOK && endOK {
+			if resource.kind == "events" && recordHasRecurrence(resource.record) && startOK && endOK {
 				calendarComponent, err := occurrenceComponent(resource.record)
 				if err != nil {
 					continue

@@ -17,6 +17,46 @@ import { AuthScreen } from './components/app/auth-screen';
 import { CreateComposer } from './components/app/create-composer';
 import { NotificationsPopover } from './components/app/notifications-popover';
 
+function compactLocalParts(value: unknown) {
+  const match = String(value ?? '').match(/^(\\d{4})(\\d{2})(\\d{2})(?:T(\\d{2})(\\d{2}))?/);
+  if (!match) return null;
+  return {
+    date: `${match[1]}-${match[2]}-${match[3]}`,
+    time: match[4] && match[5] ? `${match[4]}:${match[5]}` : undefined,
+  };
+}
+
+function entryDateTime(record: RecordModel, type: 'task' | 'event') {
+  const dateField = type === 'task' ? 'due_date' : 'start_date';
+  const localField = type === 'task' ? 'due_local' : 'start_local';
+  const allDay = type === 'event' && Boolean(record.all_day);
+  const local = compactLocalParts(record[localField]);
+  if (allDay || record.time_mode === 'date') {
+    return { date: local?.date ?? String(record[dateField] ?? '').slice(0, 10), time: undefined };
+  }
+  if (record.time_mode === 'floating' && local) return local;
+  const parsed = new Date(String(record[dateField] ?? ''));
+  if (!Number.isNaN(parsed.getTime())) {
+    return {
+      date: `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`,
+      time: `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`,
+    };
+  }
+  return local ?? { date: '', time: undefined };
+}
+
+function recordHasRecurrence(record: RecordModel) {
+  if (String(record.rrule ?? '').trim()) return true;
+  try {
+    const stored = JSON.parse(String(record.exdate ?? '')) as {
+      properties?: Record<string, unknown>;
+    };
+    return Array.isArray(stored.properties?.RDATE) && stored.properties.RDATE.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export function App() {
   const [authenticated, setAuthenticated] = useState(pb.authStore.isValid);
   const [authUserId, setAuthUserId] = useState(pb.authStore.record?.id ?? '');
@@ -169,14 +209,13 @@ export function App() {
         const containerId = String(type === 'task' ? record.list : record.calendar);
         const container = containerById.get(containerId);
         if (!container) return null;
+        const temporal = entryDateTime(record, type);
         return {
           id: record.id,
           title: String(record.title ?? ''),
           description: String(record.description ?? ''),
-          date:
-            String(type === 'task' ? record.due_date : record.start_date).slice(0, 10) ||
-            new Date().toISOString().slice(0, 10),
-          time: record.all_day ? undefined : String(record.start_date ?? '').slice(11, 16),
+          date: temporal.date || new Date().toISOString().slice(0, 10),
+          time: temporal.time,
           containerId: container.id,
           list: container.name,
           color: container.color,
@@ -194,13 +233,19 @@ export function App() {
         end: rangeEnd.toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         max: '5000',
+        recurringOnly: 'true',
       });
       let occurrences: Array<{
         id: string;
         masterId: string;
         start: string;
         end: string;
+        startLocal?: string;
+        endLocal?: string;
+        timezone?: string;
+        timeMode?: string;
         allDay: boolean;
+        recurring: boolean;
         recurrenceId?: string;
       }> = [];
       let occurrenceError = false;
@@ -210,14 +255,18 @@ export function App() {
         });
         if (!occurrenceResponse.ok) throw new Error('Could not load recurring events.');
         occurrences = (await occurrenceResponse.json()) as typeof occurrences;
-      } catch {
+      } catch (error) {
         occurrenceError = true;
+        console.warn('Could not load recurring events.', error);
       }
       if (!isCurrent()) return;
       const eventById = new Map(events.map((record) => [record.id, record]));
       const recurringEventIds = new Set(
-        events.filter((record) => String(record.rrule ?? '').trim()).map((record) => record.id),
+        events.filter(recordHasRecurrence).map((record) => record.id),
       );
+      for (const occurrence of occurrences) {
+        if (occurrence.recurring) recurringEventIds.add(occurrence.masterId);
+      }
       const eventEntries = occurrences
         .map((occurrence) => {
           if (!recurringEventIds.has(occurrence.masterId)) return null;
@@ -234,8 +283,12 @@ export function App() {
             fields: {
               ...entry.fields,
               start_date: occurrence.start,
+              start_local: occurrence.startLocal,
               end_date: occurrence.end,
+              end_local: occurrence.endLocal,
               all_day: occurrence.allDay,
+              timezone: occurrence.timezone,
+              time_mode: occurrence.timeMode,
               recurrence_id: occurrence.recurrenceId,
             },
           };
@@ -250,7 +303,10 @@ export function App() {
         hiddenContainerIds = [];
       }
       const oneOffEvents = events
-        .filter((record) => !recurringEventIds.has(record.id))
+        .filter(
+          (record) =>
+            !recurringEventIds.has(record.id) && !String(record.recurrence_parent ?? '').trim(),
+        )
         .map((record) => toEntry(record, 'event'))
         .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
       const recurringFallbacks = occurrenceError

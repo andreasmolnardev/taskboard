@@ -53,6 +53,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [customTheme, setCustomTheme] = useState<CustomTheme | null>(readCustomTheme);
   const [themeImportError, setThemeImportError] = useState('');
   const [themeText, setThemeText] = useState('');
+  const [themePasteOpen, setThemePasteOpen] = useState(false);
   const [fontSize, setFontSize] = useState<FontSize>(() => {
     const storedSize = localStorage.getItem(fontSizeStorageKey);
     return fontSizes.some((option) => option.value === storedSize)
@@ -288,6 +289,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       setCustomTheme(imported);
       setTheme(imported.appearance);
       setThemeText('');
+      setThemePasteOpen(false);
     } catch {
       setThemeImportError('That is not a valid Taskboard theme.');
     }
@@ -615,22 +617,16 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 {themeImportError && <small className="settings-error">{themeImportError}</small>}
               </div>
               <div className="custom-theme-controls">
-                <textarea
-                  className="custom-theme-input"
-                  value={themeText}
-                  onChange={(event) => setThemeText(event.target.value)}
-                  placeholder="Paste theme JSON here"
-                  aria-label="Paste custom theme JSON"
-                  rows={4}
-                />
                 <div className="theme-toggle">
                   <button
                     type="button"
                     className="button button-quiet"
-                    onClick={() => applyThemeText(themeText)}
-                    disabled={!themeText.trim()}
+                    onClick={() => {
+                      setThemeImportError('');
+                      setThemePasteOpen(true);
+                    }}
                   >
-                    Apply pasted theme
+                    Paste theme
                   </button>
                   <label className="button button-quiet">
                     <Upload size={16} /> Import file
@@ -951,6 +947,59 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
           </div>
         )}
       </section>
+      {themePasteOpen && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => setThemePasteOpen(false)}
+        >
+          <div
+            className="composer custom-theme-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="custom-theme-modal-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="composer-header">
+              <div>
+                <h2 id="custom-theme-modal-title">Paste custom theme</h2>
+                <p className="modal-subtitle">Paste the complete theme JSON, then apply it.</p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setThemePasteOpen(false)}
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <textarea
+              className="custom-theme-input"
+              value={themeText}
+              onChange={(event) => setThemeText(event.target.value)}
+              placeholder="Paste theme JSON here"
+              aria-label="Paste custom theme JSON"
+              rows={12}
+              autoFocus
+            />
+            {themeImportError && <small className="settings-error">{themeImportError}</small>}
+            <div className="modal-actions">
+              <button type="button" className="button button-quiet" onClick={() => setThemePasteOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() => applyThemeText(themeText)}
+                disabled={!themeText.trim()}
+              >
+                Apply theme
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {accountModal && (
         <div
           className="modal-backdrop"

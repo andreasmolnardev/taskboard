@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Mail, Phone, Plus, Trash2, UserRound } from 'lucide-react';
+import { Mail, Pencil, Phone, Plus, Share2, Trash2, UserRound } from 'lucide-react';
 import { pb } from '../../api/pocketbase';
 
 type Contact = {
@@ -78,6 +78,11 @@ export function PeopleTab() {
     void load();
   }, [user]);
 
+  const select = (contact: Contact) => {
+    setSelected(contact);
+    setEditorOpen(false);
+    setError('');
+  };
   const edit = (contact?: Contact) => {
     setSelected(contact ?? null);
     setEditorOpen(true);
@@ -130,6 +135,30 @@ export function PeopleTab() {
       setBusy(false);
     }
   };
+  const share = async () => {
+    if (!selected) return;
+    const details = [
+      selected.formatted_name,
+      selected.organization,
+      selected.title,
+      selected.email,
+      selected.phone,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: selected.formatted_name, text: details });
+      } else {
+        await navigator.clipboard.writeText(details);
+        setError('Contact details copied to the clipboard.');
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'AbortError') {
+        setError('Could not share this person.');
+      }
+    }
+  };
   const remove = async () => {
     if (!selected || busy) return;
     setBusy(true);
@@ -153,9 +182,6 @@ export function PeopleTab() {
         <div>
           <h1>People</h1>
         </div>
-        <button className="button button-primary" onClick={() => edit()}>
-          <Plus size={17} /> Add person
-        </button>
       </header>
       {error && (
         <p className="form-error" role="alert">
@@ -164,6 +190,9 @@ export function PeopleTab() {
       )}
       <div className="people-layout">
         <section className="people-list">
+          <button className="button button-primary people-add" onClick={() => edit()}>
+            <Plus size={17} /> Add person
+          </button>
           {loading ? (
             <p className="empty-state">Loading contacts…</p>
           ) : contacts.length === 0 ? (
@@ -176,7 +205,7 @@ export function PeopleTab() {
               <button
                 className={`person-row ${selected?.id === contact.id ? 'active' : ''}`}
                 key={contact.id}
-                onClick={() => edit(contact)}
+                onClick={() => select(contact)}
               >
                 <span className="person-avatar">
                   <UserRound size={17} />
@@ -261,6 +290,66 @@ export function PeopleTab() {
               <button className="button button-primary" onClick={() => void save()} disabled={busy}>
                 {busy ? 'Saving…' : 'Save person'}
               </button>
+            </>
+          ) : selected ? (
+            <>
+              <div className="selected-list-header">
+                <h2>{selected.formatted_name}</h2>
+                <div className="person-actions">
+                  <button className="button button-secondary" onClick={() => edit(selected)}>
+                    <Pencil size={16} /> Edit
+                  </button>
+                  <button className="icon-button" onClick={() => void share()} aria-label="Share contact">
+                    <Share2 size={18} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    onClick={() => void remove()}
+                    aria-label="Delete contact"
+                    disabled={busy}
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
+              <div className="person-details">
+                {selected.given_name && (
+                  <p>
+                    <strong>First name</strong>
+                    {selected.given_name}
+                  </p>
+                )}
+                {selected.family_name && (
+                  <p>
+                    <strong>Last name</strong>
+                    {selected.family_name}
+                  </p>
+                )}
+                {selected.email && (
+                  <p>
+                    <strong>Email</strong>
+                    {selected.email}
+                  </p>
+                )}
+                {selected.phone && (
+                  <p>
+                    <strong>Phone</strong>
+                    {selected.phone}
+                  </p>
+                )}
+                {selected.organization && (
+                  <p>
+                    <strong>Organization</strong>
+                    {selected.organization}
+                  </p>
+                )}
+                {selected.title && (
+                  <p>
+                    <strong>Title</strong>
+                    {selected.title}
+                  </p>
+                )}
+              </div>
             </>
           ) : (
             <div className="empty-state">

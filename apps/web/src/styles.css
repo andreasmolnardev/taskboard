@@ -841,7 +841,7 @@ h3 {
   display: grid;
   grid-template-columns: minmax(190px, 1fr) minmax(0, 2fr);
   gap: 50px;
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - 180px);
 }
 .list-picker {
   border-right: 1px solid var(--border);
@@ -1780,7 +1780,7 @@ footer .sync-dot {
 }
 
 .people-page { width: 100%; }
-.people-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: 34px; min-height: calc(100vh - 120px); }
+.people-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: 34px; min-height: calc(100vh - 180px); }
 .people-list { border-right: 1px solid var(--border); padding-right: 24px; }
 .people-add { width: 100%; justify-content: center; margin-bottom: 12px; }
 .person-row { width: 100%; display: flex; align-items: center; gap: 11px; text-align: left; padding: 11px; border: 0; border-radius: 9px; background: transparent; color: var(--foreground); }

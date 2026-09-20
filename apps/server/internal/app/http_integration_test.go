@@ -396,6 +396,48 @@ func TestCardDAVHTTPIntegration(t *testing.T) {
 	}
 }
 
+func TestOccurrencesHTTPIntegration(t *testing.T) {
+	server := newHTTPIntegrationServer(t)
+	owner := integrationUser(t, server.app, "occurrences-http@example.com")
+	calendar := ownedDefault(t, server.app, "calendars", owner.Id, "Events and Holidays")
+	collection, err := server.app.FindCollectionByNameOrId("events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := core.NewRecord(collection)
+	event.Set("owner", owner.Id)
+	event.Set("calendar", calendar.Id)
+	event.Set("title", "Recurring HTTP")
+	event.Set("start_date", "2026-09-13 09:00:00.000Z")
+	event.Set("end_date", "2026-09-13 10:00:00.000Z")
+	event.Set("rrule", "FREQ=DAILY;COUNT=2")
+	if err := server.app.Save(event); err != nil {
+		t.Fatal(err)
+	}
+	token := authToken(t, server, owner.GetString("email"))
+	path := "/api/calendar/occurrences?" + url.Values{
+		"start":         {"2026-09-13T00:00:00Z"},
+		"end":           {"2026-09-15T00:00:00Z"},
+		"timezone":      {"UTC"},
+		"recurringOnly": {"true"},
+	}.Encode()
+	status, _, body := integrationRequest(t, server, http.MethodGet, path, "", bearerHeaders(token))
+	if status != http.StatusOK {
+		t.Fatalf("occurrences status = %d, body = %s", status, body)
+	}
+	var items []occurrenceResult
+	if err := json.Unmarshal([]byte(body), &items); err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0].MasterID != event.Id || !items[0].Recurring {
+		t.Fatalf("occurrences response = %#v", items)
+	}
+	status, _, _ = integrationRequest(t, server, http.MethodGet, path, "", nil)
+	if status != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated occurrences status = %d", status)
+	}
+}
+
 func TestPocketBaseHTTPAuthorizationRules(t *testing.T) {
 	server := newHTTPIntegrationServer(t)
 	owner := integrationUser(t, server.app, "rules-owner@example.com")

@@ -145,6 +145,45 @@ func TestCalendarOccurrencesEnforcesGlobalLimit(t *testing.T) {
 	}
 }
 
+func TestCalendarOccurrencesSupportsRDateOnlyAndSkipsBadOneOff(t *testing.T) {
+	testApp, owner, calendar := newCalendarTestApp(t)
+	defer testApp.Cleanup()
+	master := addOccurrenceEvent(t, testApp, map[string]any{
+		"owner": owner.Id, "calendar": calendar.Id, "title": "RDATE", "start_date": "2026-09-13 09:00:00.000Z",
+		"exdate": recurrenceDates(t, "RDATE:20260920T090000Z"),
+	})
+	addOccurrenceEvent(t, testApp, map[string]any{
+		"owner": owner.Id, "calendar": calendar.Id, "title": "Bad one-off",
+		"start_date": "2026-09-13 10:00:00.000Z", "end_date": "2026-09-13 09:00:00.000Z",
+	})
+
+	items, err := calendarOccurrences(testApp, owner.Id, occurrenceParams{
+		Start: mustTime(t, "2026-09-13T00:00:00Z"), End: mustTime(t, "2026-09-21T00:00:00Z"), Max: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0].MasterID != master.Id || items[1].MasterID != master.Id {
+		t.Fatalf("got RDATE occurrences = %#v", items)
+	}
+	for _, item := range items {
+		if !item.Recurring {
+			t.Fatalf("RDATE occurrence was not marked recurring: %#v", item)
+		}
+	}
+}
+
+func TestPrepareRecurrenceOverrideRejectsOneOff(t *testing.T) {
+	testApp, owner, calendar := newCalendarTestApp(t)
+	defer testApp.Cleanup()
+	oneOff := addOccurrenceEvent(t, testApp, map[string]any{
+		"owner": owner.Id, "calendar": calendar.Id, "title": "One-off", "start_date": "2026-09-13 09:00:00.000Z",
+	})
+	if _, _, err := prepareRecurrenceOverride(testApp, owner.Id, oneOff.Id, "2026-09-13T09:00:00Z"); err == nil {
+		t.Fatal("one-off event accepted as a recurring master")
+	}
+}
+
 func TestParseOccurrenceParamsRejectsInvalidBounds(t *testing.T) {
 	validStart := "2026-09-01T00:00:00Z"
 	validEnd := "2026-10-01T00:00:00Z"

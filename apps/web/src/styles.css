@@ -1143,6 +1143,31 @@ kbd {
   margin-bottom: 5px;
   font-size: 14px;
 }
+.custom-theme-settings {
+  align-items: flex-start;
+}
+.custom-theme-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: min(100%, 420px);
+}
+.custom-theme-input {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px;
+  color: var(--foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+}
+.custom-theme-input:focus {
+  border-color: var(--primary);
+  outline: 2px solid color-mix(in srgb, var(--primary) 20%, transparent);
+}
 .settings-section p {
   color: var(--muted);
   font-size: 12px;

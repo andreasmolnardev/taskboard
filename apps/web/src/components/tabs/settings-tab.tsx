@@ -52,6 +52,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   );
   const [customTheme, setCustomTheme] = useState<CustomTheme | null>(readCustomTheme);
   const [themeImportError, setThemeImportError] = useState('');
+  const [themeText, setThemeText] = useState('');
   const [fontSize, setFontSize] = useState<FontSize>(() => {
     const storedSize = localStorage.getItem(fontSizeStorageKey);
     return fontSizes.some((option) => option.value === storedSize)
@@ -278,23 +279,26 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     }
   };
 
+  const applyThemeText = (text: string) => {
+    setThemeImportError('');
+    try {
+      const imported = parseCustomTheme(JSON.parse(text));
+      if (!imported) throw new Error('invalid theme');
+      saveCustomTheme(imported);
+      setCustomTheme(imported);
+      setTheme(imported.appearance);
+      setThemeText('');
+    } catch {
+      setThemeImportError('That is not a valid Taskboard theme.');
+    }
+  };
+
   const handleThemeImport = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    setThemeImportError('');
     const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const imported = parseCustomTheme(JSON.parse(String(reader.result)));
-        if (!imported) throw new Error('invalid theme');
-        saveCustomTheme(imported);
-        setCustomTheme(imported);
-        setTheme(imported.appearance);
-      } catch {
-        setThemeImportError('That file is not a valid Taskboard theme.');
-      }
-    };
+    reader.onload = () => applyThemeText(String(reader.result));
     reader.onerror = () => setThemeImportError('Could not read that theme file.');
     reader.readAsText(file);
   };
@@ -610,28 +614,46 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 </p>
                 {themeImportError && <small className="settings-error">{themeImportError}</small>}
               </div>
-              <div className="theme-toggle">
-                <label className="button button-quiet">
-                  <Upload size={16} /> Import
-                  <input
-                    type="file"
-                    accept="application/json,.json"
-                    onChange={handleThemeImport}
-                    hidden
-                  />
-                </label>
-                {customTheme && (
+              <div className="custom-theme-controls">
+                <textarea
+                  className="custom-theme-input"
+                  value={themeText}
+                  onChange={(event) => setThemeText(event.target.value)}
+                  placeholder="Paste theme JSON here"
+                  aria-label="Paste custom theme JSON"
+                  rows={4}
+                />
+                <div className="theme-toggle">
                   <button
                     type="button"
                     className="button button-quiet"
-                    onClick={() => {
-                      clearCustomTheme();
-                      setCustomTheme(null);
-                    }}
+                    onClick={() => applyThemeText(themeText)}
+                    disabled={!themeText.trim()}
                   >
-                    Reset
+                    Apply pasted theme
                   </button>
-                )}
+                  <label className="button button-quiet">
+                    <Upload size={16} /> Import file
+                    <input
+                      type="file"
+                      accept="application/json,.json"
+                      onChange={handleThemeImport}
+                      hidden
+                    />
+                  </label>
+                  {customTheme && (
+                    <button
+                      type="button"
+                      className="button button-quiet"
+                      onClick={() => {
+                        clearCustomTheme();
+                        setCustomTheme(null);
+                      }}
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             <div className="settings-section font-size-settings">

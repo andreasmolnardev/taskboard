@@ -16,6 +16,7 @@ import { PeopleTab } from './components/tabs/people-tab';
 import { AuthScreen } from './components/app/auth-screen';
 import { CreateComposer } from './components/app/create-composer';
 import { NotificationsPopover } from './components/app/notifications-popover';
+import { applyCustomTheme, readCustomTheme } from './theme';
 
 function compactLocalParts(value: unknown) {
   const match = String(value ?? '').match(/^(\\d{4})(\\d{2})(\\d{2})(?:T(\\d{2})(\\d{2}))?/);
@@ -93,7 +94,17 @@ export function App() {
   const [, setDataVersion] = useState(0);
   const loadVersion = useRef(0);
   const knownUserId = useRef(pb.authStore.record?.id ?? '');
-  const { resolvedTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
+  useEffect(() => {
+    const applyStoredTheme = () => {
+      const customTheme = readCustomTheme();
+      applyCustomTheme(customTheme);
+      if (customTheme) setTheme(customTheme.appearance);
+    };
+    applyStoredTheme();
+    window.addEventListener('taskboard-custom-theme-change', applyStoredTheme);
+    return () => window.removeEventListener('taskboard-custom-theme-change', applyStoredTheme);
+  }, []);
   const closeNotifications = () => {
     setNotificationsClosing(false);
     setNotificationsOpen(false);
@@ -157,10 +168,12 @@ export function App() {
     if (!authenticated || !authUserId) return;
     const userId = authUserId;
     const storedAccent = localStorage.getItem(`taskboard-accent-${userId}`);
-    document.documentElement.style.setProperty(
-      '--primary',
-      storedAccent ?? accentColors[0].value,
-    );
+    if (!readCustomTheme()) {
+      document.documentElement.style.setProperty(
+        '--primary',
+        storedAccent ?? accentColors[0].value,
+      );
+    }
     const storedSize = localStorage.getItem(`taskboard-font-size-${userId}`);
     const selectedSize = fontSizes.find((option) => option.value === storedSize);
     document.documentElement.style.setProperty(

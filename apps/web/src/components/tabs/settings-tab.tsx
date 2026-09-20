@@ -14,6 +14,13 @@ import {
 import { useTheme } from 'next-themes';
 import { apiBaseUrl, apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
+import {
+  clearCustomTheme,
+  parseCustomTheme,
+  readCustomTheme,
+  saveCustomTheme,
+  type CustomTheme,
+} from '../../theme';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { ContainerManager, type ManagedContainer } from '../container-manager';
 import {
@@ -43,6 +50,8 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [accentColor, setAccentColor] = useState(
     () => localStorage.getItem(accentStorageKey) ?? accentColors[0].value,
   );
+  const [customTheme, setCustomTheme] = useState<CustomTheme | null>(readCustomTheme);
+  const [themeImportError, setThemeImportError] = useState('');
   const [fontSize, setFontSize] = useState<FontSize>(() => {
     const storedSize = localStorage.getItem(fontSizeStorageKey);
     return fontSizes.some((option) => option.value === storedSize)
@@ -88,9 +97,15 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const carddavBaseUrl = `${apiBaseUrl}/carddav`;
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--primary', accentColor);
+    const updateCustomTheme = () => setCustomTheme(readCustomTheme());
+    window.addEventListener('taskboard-custom-theme-change', updateCustomTheme);
+    return () => window.removeEventListener('taskboard-custom-theme-change', updateCustomTheme);
+  }, []);
+
+  useEffect(() => {
+    if (!customTheme) document.documentElement.style.setProperty('--primary', accentColor);
     localStorage.setItem(accentStorageKey, accentColor);
-  }, [accentColor, accentStorageKey]);
+  }, [accentColor, accentStorageKey, customTheme]);
 
   useEffect(() => {
     const selectedSize = fontSizes.find((option) => option.value === fontSize) ?? fontSizes[1];
@@ -261,6 +276,27 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     } finally {
       setPasswordBusy(false);
     }
+  };
+
+  const handleThemeImport = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setThemeImportError('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const imported = parseCustomTheme(JSON.parse(String(reader.result)));
+        if (!imported) throw new Error('invalid theme');
+        saveCustomTheme(imported);
+        setCustomTheme(imported);
+        setTheme(imported.appearance);
+      } catch {
+        setThemeImportError('That file is not a valid Taskboard theme.');
+      }
+    };
+    reader.onerror = () => setThemeImportError('Could not read that theme file.');
+    reader.readAsText(file);
   };
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -499,6 +535,14 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     }
   };
 
+  const selectBuiltInTheme = (nextTheme: 'light' | 'dark' | 'system') => {
+    if (customTheme) {
+      clearCustomTheme();
+      setCustomTheme(null);
+    }
+    setTheme(nextTheme);
+  };
+
   return (
     <>
       <header className="page-header">
@@ -535,25 +579,59 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
               <div className="theme-toggle" role="group" aria-label="Theme">
                 <button
                   className={theme === 'light' ? 'active' : ''}
-                  onClick={() => setTheme('light')}
+                  onClick={() => selectBuiltInTheme('light')}
                   aria-pressed={theme === 'light'}
                 >
                   <Sun size={16} /> Light
                 </button>
                 <button
                   className={theme === 'dark' ? 'active' : ''}
-                  onClick={() => setTheme('dark')}
+                  onClick={() => selectBuiltInTheme('dark')}
                   aria-pressed={theme === 'dark'}
                 >
                   <Moon size={16} /> Dark
                 </button>
                 <button
                   className={theme === 'system' ? 'active' : ''}
-                  onClick={() => setTheme('system')}
+                  onClick={() => selectBuiltInTheme('system')}
                   aria-pressed={theme === 'system'}
                 >
                   <Monitor size={16} /> Device
                 </button>
+              </div>
+            </div>
+            <div className="settings-section custom-theme-settings">
+              <div>
+                <h2>Custom theme</h2>
+                <p>
+                  {customTheme
+                    ? `${customTheme.name}${customTheme.author ? ` by ${customTheme.author}` : ''}`
+                    : 'Import a theme JSON file.'}
+                </p>
+                {themeImportError && <small className="settings-error">{themeImportError}</small>}
+              </div>
+              <div className="theme-toggle">
+                <label className="button button-quiet">
+                  <Upload size={16} /> Import
+                  <input
+                    type="file"
+                    accept="application/json,.json"
+                    onChange={handleThemeImport}
+                    hidden
+                  />
+                </label>
+                {customTheme && (
+                  <button
+                    type="button"
+                    className="button button-quiet"
+                    onClick={() => {
+                      clearCustomTheme();
+                      setCustomTheme(null);
+                    }}
+                  >
+                    Reset
+                  </button>
+                )}
               </div>
             </div>
             <div className="settings-section font-size-settings">

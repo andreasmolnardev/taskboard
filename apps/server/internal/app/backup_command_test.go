@@ -13,17 +13,19 @@ func TestValidateBackupName(t *testing.T) {
 		name  string
 		valid bool
 	}{
+		{"manual_20260913_120000.zip.enc", true},
+		{"pb_backup_taskboard_ab12cd.zip.enc", true},
+		{"@auto_pb_backup_taskboard_ab12cd.zip.enc", true},
 		{"manual_20260913_120000.zip", true},
-		{"pb_backup_taskboard_ab12cd.zip", true},
-		{"@auto_pb_backup_taskboard_ab12cd.zip", true},
 		{"../data.db", false},
 		{"folder/backup.zip", false},
 		{`folder\\backup.zip`, false},
-		{"backup.ZIP", false},
-		{"backup zip.zip", false},
-		{".zip", false},
+		{"backup.ZIP.enc", false},
+		{"backup zip.zip.enc", false},
+		{".zip.enc", false},
+		{"backup.zip", true},
 		{"", false},
-		{strings.Repeat("a", 147) + ".zip", false},
+		{strings.Repeat("a", 143) + ".zip.enc", false},
 	}
 
 	for _, test := range tests {
@@ -47,7 +49,7 @@ func TestBackupRestoreRequiresConfirmation(t *testing.T) {
 			return nil
 		},
 	}).restoreCommand()
-	command.SetArgs([]string{"safe.zip"})
+	command.SetArgs([]string{"safe.zip.enc"})
 
 	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "--confirm") {
 		t.Fatalf("expected confirmation error, got %v", err)
@@ -66,7 +68,7 @@ func TestBackupRestoreSkipsCommandAfterRestart(t *testing.T) {
 			return nil
 		},
 	}).restoreCommand()
-	command.SetArgs([]string{"safe.zip", "--confirm"})
+	command.SetArgs([]string{"safe.zip.enc", "--confirm"})
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
@@ -102,12 +104,12 @@ func TestBackupRestoreConfirmed(t *testing.T) {
 			return nil
 		},
 	}).restoreCommand()
-	command.SetArgs([]string{"safe.zip", "--confirm"})
+	command.SetArgs([]string{"safe.zip.enc", "--confirm"})
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if restoredName != "safe.zip" {
+	if restoredName != "safe.zip.enc" {
 		t.Fatalf("restored %q", restoredName)
 	}
 }

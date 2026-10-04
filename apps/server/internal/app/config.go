@@ -1,8 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"strconv"
+
+	"github.com/pocketbase/pocketbase/tools/cron"
 )
 
 type RegistrationMode string
@@ -14,17 +17,18 @@ const (
 )
 
 type Config struct {
-	HTTPAddress      string
-	PublicURL        string
-	SecureCookies    bool
-	RegistrationMode RegistrationMode
-	LogLevel         string
-	StoragePath      string
-	Development      bool
-	BackupEnabled    bool
-	BackupCron       string
-	BackupMaxKeep    int
-	BackupS3         BackupS3Config
+	HTTPAddress       string
+	PublicURL         string
+	SecureCookies     bool
+	RegistrationMode  RegistrationMode
+	LogLevel          string
+	StoragePath       string
+	Development       bool
+	BackupEnabled     bool
+	BackupJSONEnabled bool
+	BackupCron        string
+	BackupMaxKeep     int
+	BackupS3          BackupS3Config
 }
 
 type BackupS3Config struct {
@@ -39,16 +43,17 @@ type BackupS3Config struct {
 
 func LoadConfig() Config {
 	return Config{
-		HTTPAddress:      env("SLOPSTACK_HTTP_ADDRESS", "0.0.0.0:8090"),
-		PublicURL:        env("SLOPSTACK_PUBLIC_URL", "http://localhost:8090"),
-		SecureCookies:    envBool("SLOPSTACK_SECURE_COOKIES", false),
-		RegistrationMode: registrationMode(),
-		LogLevel:         env("SLOPSTACK_LOG_LEVEL", "info"),
-		StoragePath:      env("SLOPSTACK_STORAGE_PATH", "pb_data"),
-		Development:      envBool("SLOPSTACK_DEVELOPMENT", false),
-		BackupEnabled:    envBool("SLOPSTACK_BACKUP_ENABLED", false),
-		BackupCron:       env("SLOPSTACK_BACKUP_CRON", "0 3 * * *"),
-		BackupMaxKeep:    envInt("SLOPSTACK_BACKUP_MAX_KEEP", 14),
+		HTTPAddress:       env("SLOPSTACK_HTTP_ADDRESS", "0.0.0.0:8090"),
+		PublicURL:         env("SLOPSTACK_PUBLIC_URL", "http://localhost:8090"),
+		SecureCookies:     envBool("SLOPSTACK_SECURE_COOKIES", false),
+		RegistrationMode:  registrationMode(),
+		LogLevel:          env("SLOPSTACK_LOG_LEVEL", "info"),
+		StoragePath:       env("SLOPSTACK_STORAGE_PATH", "pb_data"),
+		Development:       envBool("SLOPSTACK_DEVELOPMENT", false),
+		BackupEnabled:     envBool("SLOPSTACK_BACKUP_ENABLED", false),
+		BackupJSONEnabled: envBool("SLOPSTACK_BACKUP_JSON_ENABLED", false),
+		BackupCron:        env("SLOPSTACK_BACKUP_CRON", "0 3 * * *"),
+		BackupMaxKeep:     envInt("SLOPSTACK_BACKUP_MAX_KEEP", 14),
 		BackupS3: BackupS3Config{
 			Enabled:        envBool("SLOPSTACK_BACKUP_S3_ENABLED", false),
 			Bucket:         env("SLOPSTACK_BACKUP_S3_BUCKET", ""),
@@ -59,6 +64,16 @@ func LoadConfig() Config {
 			ForcePathStyle: envBool("SLOPSTACK_BACKUP_S3_FORCE_PATH_STYLE", false),
 		},
 	}
+}
+
+func validateBackupSchedule(expression string, maxKeep int) error {
+	if maxKeep < 1 {
+		return fmt.Errorf("invalid backup configuration: retention must be at least 1")
+	}
+	if err := cron.New().Add("backup-validation", expression, func() {}); err != nil {
+		return fmt.Errorf("invalid backup configuration: %w", err)
+	}
+	return nil
 }
 
 func registrationMode() RegistrationMode {

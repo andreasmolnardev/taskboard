@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var backupNamePattern = regexp.MustCompile(`^@?[a-z0-9_-]+\.zip$`)
+var backupNamePattern = regexp.MustCompile(`^@?[a-z0-9_-]+\.zip(\.enc)?$`)
 
 const backupRestoreRestartedEnv = "SLOPSTACK_BACKUP_RESTORE_RESTARTED"
 
@@ -26,19 +27,29 @@ type BackupFile struct {
 }
 
 type BackupCommand struct {
-	Create  func(context.Context) (string, error)
-	List    func(context.Context) ([]BackupFile, error)
-	Restore func(context.Context, string) error
+	dataDir    string
+	Create     func(context.Context) (string, error)
+	List       func(context.Context) ([]BackupFile, error)
+	Restore    func(context.Context, string) error
+	createJSON func(context.Context) (string, error)
 }
 
 func NewBackupCommand(pb core.App) *BackupCommand {
 	return &BackupCommand{
-		Create: func(ctx context.Context) (string, error) {
-			name := "manual_" + time.Now().UTC().Format("20060102_150405_000000000") + ".zip"
-			if err := pb.CreateBackup(ctx, name); err != nil {
+		dataDir: pb.DataDir(),
+		createJSON: func(ctx context.Context) (string, error) {
+			key, err := loadBackupKey(pb.DataDir())
+			if err != nil {
 				return "", err
 			}
-			return name, nil
+			return createEncryptedJSON(ctx, pb, key)
+		},
+		Create: func(ctx context.Context) (string, error) {
+			key, err := loadBackupKey(pb.DataDir())
+			if err != nil {
+				return "", err
+			}
+			return createEncryptedArchive(ctx, pb, key, "manual_"+time.Now().UTC().Format("20060102_150405_000000000"))
 		},
 		List: func(ctx context.Context) ([]BackupFile, error) {
 			fsys, err := pb.NewBackupsFilesystem()
@@ -62,13 +73,22 @@ func NewBackupCommand(pb core.App) *BackupCommand {
 			sort.Slice(files, func(i, j int) bool { return files[i].Modified.After(files[j].Modified) })
 			return files, nil
 		},
-		Restore: pb.RestoreBackup,
+		Restore: func(ctx context.Context, name string) error {
+			if !strings.HasSuffix(name, ".enc") {
+				return pb.RestoreBackup(ctx, name)
+			}
+			key, err := loadBackupKey(pb.DataDir())
+			if err != nil {
+				return err
+			}
+			return restoreEncryptedArchive(ctx, pb, key, name)
+		},
 	}
 }
 
 func (c *BackupCommand) Command() *cobra.Command {
 	backup := &cobra.Command{Use: "backup", Short: "Manage PocketBase backups"}
-	backup.AddCommand(c.createCommand(), c.listCommand(), c.restoreCommand())
+	backup.AddCommand(c.createCommand(), c.jsonCommand(), c.keyInitCommand(), c.keyImportCommand(), c.listCommand(), c.restoreCommand())
 	return backup
 }
 
@@ -81,6 +101,61 @@ func (c *BackupCommand) createCommand() *cobra.Command {
 			name, err := c.Create(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("create backup: %w", err)
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), name)
+			return nil
+		},
+	}
+}
+
+func (c *BackupCommand) keyInitCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "key-init",
+		Short: "Create a backup encryption key and show it once",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			key, err := createBackupKey(c.dataDir)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Save this recovery key now. It is shown only once:")
+			fmt.Fprintln(cmd.OutOrStdout(), key)
+			return nil
+		},
+	}
+}
+
+func (c *BackupCommand) keyImportCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "key-import",
+		Short: "Install a saved recovery key from standard input",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			value, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), 1025))
+			if err != nil {
+				return err
+			}
+			if len(value) > 1024 {
+				return errors.New("recovery key input is too large")
+			}
+			if err := importBackupKey(c.dataDir, string(value)); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Recovery key installed.")
+			return nil
+		},
+	}
+}
+
+func (c *BackupCommand) jsonCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "json",
+		Short: "Create an encrypted JSON export of taskboard records",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			name, err := c.createJSON(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("create JSON backup: %w", err)
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), name)
 			return nil

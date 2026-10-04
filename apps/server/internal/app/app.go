@@ -21,6 +21,9 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 		if err := e.Next(); err != nil {
 			return err
 		}
+		if err := cleanupTransientBackupArchives(e.App.DataDir()); err != nil {
+			return fmt.Errorf("clean up temporary backup files: %w", err)
+		}
 		if err := e.App.RunAppMigrations(); err != nil {
 			return err
 		}
@@ -41,6 +44,7 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 	registerOwnershipHooks(pb)
 	registerCalDAVChangeHooks(pb)
 	registerReminderScheduler(pb)
+	registerEncryptedBackupScheduler(pb, config)
 	pb.OnRecordAfterCreateSuccess("users").BindFunc(func(e *core.RecordEvent) error {
 		if err := provisionDefaultContainers(e.App, e.Record.Id); err != nil {
 			return err
@@ -65,7 +69,10 @@ func applyBackupConfig(app core.App, config Config) error {
 		return nil
 	}
 
-	settings.Backups.Cron = config.BackupCron
+	if err := validateBackupSchedule(config.BackupCron, config.BackupMaxKeep); err != nil {
+		return err
+	}
+	settings.Backups.Cron = ""
 	settings.Backups.CronMaxKeep = config.BackupMaxKeep
 	settings.Backups.S3 = core.S3Config{
 		Enabled:        config.BackupS3.Enabled,

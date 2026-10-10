@@ -1,0 +1,2269 @@
+{
+  "$schema": "https://taskboard.local/schemas/baseline.v1.json",
+  "baselineVersion": 1,
+  "generatedBy": "phase-0 audit, verified against the working tree",
+  "repository": {
+    "name": "taskboard",
+    "commit": "75b827a741f3ff537a226f57191f0be5006931cb",
+    "modulePath": "github.com/slopstack/slopstack",
+    "webPackageName": "@slopstack/web",
+    "rootPackageName": "slopstack",
+    "binaryPath": "apps/server/cmd/slopstack",
+    "cliRootCommand": "slopstack",
+    "envPrefix": "SLOPSTACK_",
+    "identityFixed": false,
+    "note": "Module and package names still carry the slopstack template identity; Phase 1 renames them."
+  },
+  "toolVersions": {
+    "go": "go1.27.1",
+    "goPlatform": "darwin/arm64",
+    "goDirectiveInGoMod": "1.26.0",
+    "node": "22.23.2",
+    "pnpm": "11.8.0",
+    "packageManagerPinnedInPackageJson": "pnpm@11.8.0",
+    "ciPnpm": "11",
+    "ciNode": "24",
+    "ciGo": "stable",
+    "ciMatchesLocalToolchain": false
+  },
+  "dependencyVersions": {
+    "github.com/pocketbase/pocketbase": "v0.39.6",
+    "github.com/danielgtaylor/huma/v2": "v2.38.0",
+    "github.com/go-chi/chi/v5": "v5.3.1",
+    "github.com/spf13/cobra": "v1.10.2",
+    "github.com/emersion/go-ical": "v0.0.0-20250609112844-439c63cef608",
+    "github.com/teambition/rrule-go": "v1.8.2",
+    "react": "^19.2.4",
+    "@tanstack/react-router": "^1.133.15",
+    "@tanstack/react-query": "^5.90.12",
+    "pocketbase-js": "^0.26.5",
+    "vite": "^7.3.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  },
+  "commands": {
+    "goBuild": {
+      "command": "go build ./...",
+      "cwd": "apps/server",
+      "result": "pass"
+    },
+    "goTest": {
+      "command": "go test ./...",
+      "cwd": "apps/server",
+      "result": "pass",
+      "packages": {
+        "apps/server/cmd/slopstack": "no test files",
+        "apps/server/internal/app": {
+          "result": "pass",
+          "durationSeconds": 20.3
+        },
+        "apps/server/internal/calendar": {
+          "result": "pass",
+          "durationSeconds": 1.4
+        },
+        "apps/server/internal/reminders": {
+          "result": "pass",
+          "durationSeconds": 1.1
+        },
+        "apps/server/pb_migrations": "no test files"
+      }
+    },
+    "pnpmLint": {
+      "command": "pnpm -r lint",
+      "cwd": ".",
+      "result": "pass",
+      "packages": [
+        "@slopstack/web"
+      ]
+    },
+    "pnpmTest": {
+      "command": "pnpm -r test",
+      "cwd": ".",
+      "result": "pass",
+      "packages": [
+        "@slopstack/web"
+      ],
+      "testFiles": 11,
+      "tests": 34,
+      "runner": "vitest run --passWithNoTests"
+    },
+    "pnpmBuild": {
+      "command": "pnpm -r build",
+      "cwd": ".",
+      "result": "pass",
+      "packages": [
+        "@slopstack/web"
+      ]
+    }
+  },
+  "webTestFiles": [
+    "src/data.test.ts",
+    "src/theme.test.ts",
+    "src/components/calendar-month.test.tsx",
+    "src/components/full-month-calendar.test.tsx",
+    "src/components/container-manager/container-manager.test.tsx",
+    "src/components/tabs/lists-tab.test.tsx",
+    "src/components/app/create-composer.helpers.test.ts",
+    "src/components/time-grid/layout.test.ts",
+    "src/components/time-grid/position.test.ts",
+    "src/components/time-grid/segments.test.ts",
+    "src/components/time-grid/time-grid.test.tsx"
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/openapi.json",
+      "auth": "none",
+      "source": "internal/app/app.go:180"
+    },
+    {
+      "method": "GET",
+      "path": "/openapi.yaml",
+      "auth": "none",
+      "source": "internal/app/app.go:181"
+    },
+    {
+      "method": "GET",
+      "path": "/docs",
+      "auth": "none",
+      "source": "internal/app/app.go:188"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/registration-policy",
+      "auth": "none",
+      "response": {
+        "mode": "disabled|approval|otp"
+      },
+      "source": "internal/app/app.go:203"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/guest",
+      "auth": "none",
+      "condition": "registered only when SLOPSTACK_DEVELOPMENT=true",
+      "response": [
+        "token",
+        "record.id",
+        "record.collectionId",
+        "record.collectionName",
+        "record.email",
+        "record.verified",
+        "record.display_name"
+      ],
+      "source": "internal/app/app.go:209"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/app-passwords",
+      "auth": "bearer",
+      "response": [
+        "id",
+        "name",
+        "created"
+      ],
+      "order": "-created",
+      "source": "internal/app/app_passwords.go:78"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/app-passwords",
+      "auth": "bearer",
+      "requestBody": {
+        "name": "string"
+      },
+      "status": 201,
+      "response": [
+        "id",
+        "name",
+        "secret"
+      ],
+      "note": "secret returned exactly once",
+      "source": "internal/app/app_passwords.go:85"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/auth/app-passwords/{id}",
+      "auth": "bearer",
+      "status": 204,
+      "errors": [
+        404
+      ],
+      "source": "internal/app/app_passwords.go:117"
+    },
+    {
+      "method": "POST",
+      "path": "/api/calendars/import",
+      "auth": "bearer",
+      "requestBody": {
+        "encoding": "multipart/form-data",
+        "fields": [
+          "calendar (id, required for VEVENT)",
+          "list (id, required for VTODO)",
+          "file (required)"
+        ]
+      },
+      "response": {
+        "imported": "int"
+      },
+      "maxBodyBytes": 10485760,
+      "errors": [
+        400
+      ],
+      "source": "internal/app/calendar_io.go:28"
+    },
+    {
+      "method": "GET",
+      "path": "/api/calendars/{id}/export.ics",
+      "auth": "bearer",
+      "contentType": "text/calendar",
+      "source": "internal/app/calendar_io.go:29"
+    },
+    {
+      "method": "GET",
+      "path": "/api/calendar/occurrences",
+      "auth": "bearer",
+      "queryParams": {
+        "start": "RFC3339 required",
+        "end": "RFC3339 required, must be after start",
+        "timezone": "IANA name, optional",
+        "max": "int, 1..5000, default 1000",
+        "recurringOnly": "bool, optional"
+      },
+      "defaultMax": 1000,
+      "maxMax": 5000,
+      "source": "internal/app/occurrences.go:53"
+    },
+    {
+      "method": "POST",
+      "path": "/api/calendar/occurrences/{masterId}/override",
+      "auth": "bearer",
+      "source": "internal/app/occurrences.go:54"
+    },
+    {
+      "method": "POST",
+      "path": "/api/calendar/occurrences/{masterId}/cancel",
+      "auth": "bearer",
+      "sideEffect": "adds an EXDATE for one instance",
+      "source": "internal/app/occurrences.go:55"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications",
+      "auth": "bearer",
+      "filter": "dismissed_at='' && (snoozed_until='' || snoozed_until<=now)",
+      "order": "-created",
+      "source": "internal/app/notifications.go:120"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/notifications/{id}/read",
+      "auth": "bearer",
+      "idempotent": true,
+      "source": "internal/app/notifications.go:121"
+    },
+    {
+      "method": "POST",
+      "path": "/api/notifications/{id}/snooze",
+      "auth": "bearer",
+      "requestBody": {
+        "until": "RFC3339, must be in the future"
+      },
+      "sideEffect": "sets snoozed_until, clears read and read_at",
+      "errors": [
+        400
+      ],
+      "source": "internal/app/notifications.go:122"
+    },
+    {
+      "method": "POST",
+      "path": "/api/notifications/{id}/dismiss",
+      "auth": "bearer",
+      "sideEffect": "sets dismissed_at",
+      "source": "internal/app/notifications.go:123"
+    },
+    {
+      "method": "POST",
+      "path": "/api/notifications/read-all",
+      "auth": "bearer",
+      "source": "internal/app/notifications.go:124"
+    },
+    {
+      "method": "POST",
+      "path": "/api/reminders",
+      "auth": "bearer",
+      "requestBody": {
+        "targetKind": "string",
+        "targetId": "string",
+        "at": "RFC3339",
+        "offsetMinutes": "int|null",
+        "channel": "string, only 'in_app' accepted"
+      },
+      "errors": [
+        {
+          "status": 400
+        },
+        {
+          "status": 404
+        },
+        {
+          "status": 409,
+          "body": {
+            "error": "reminder already exists"
+          }
+        }
+      ],
+      "source": "internal/app/notifications.go:125"
+    },
+    {
+      "method": "GET",
+      "path": "/api/search",
+      "auth": "bearer",
+      "queryParams": [
+        "query",
+        "type",
+        "from",
+        "to",
+        "container",
+        "completed",
+        "status",
+        "page",
+        "perPage"
+      ],
+      "defaultPage": 1,
+      "defaultPerPage": 20,
+      "maxPerPage": 100,
+      "response": [
+        "page",
+        "perPage",
+        "totalItems",
+        "totalPages",
+        "items"
+      ],
+      "itemTypes": [
+        "todo",
+        "event",
+        "list",
+        "calendar",
+        "contact"
+      ],
+      "source": "internal/app/search.go:76"
+    },
+    {
+      "method": "GET",
+      "path": "/api/todos",
+      "auth": "bearer",
+      "status": 200,
+      "response": [],
+      "note": "hard-coded empty array; documented as openapiOperationId listTodos",
+      "openapiOperationId": "listTodos",
+      "source": "internal/app/app.go:242"
+    },
+    {
+      "method": "ANY",
+      "path": "/.well-known/caldav",
+      "auth": "basic",
+      "status": 308,
+      "redirectsTo": "/caldav/",
+      "source": "internal/app/caldav.go:50"
+    },
+    {
+      "method": "ANY",
+      "path": "/caldav",
+      "auth": "basic",
+      "source": "internal/app/caldav.go:51",
+      "allow": "OPTIONS, PROPFIND, REPORT, GET, HEAD, PUT, DELETE",
+      "dav": "1, 3, calendar-access",
+      "realm": "Taskboard CalDAV",
+      "maxBodyBytes": 10485760,
+      "maxQueryResults": 500
+    },
+    {
+      "method": "ANY",
+      "path": "/caldav/{path...}",
+      "auth": "basic",
+      "source": "internal/app/caldav.go:52"
+    },
+    {
+      "method": "ANY",
+      "path": "/.well-known/carddav",
+      "auth": "basic",
+      "status": 301,
+      "redirectsTo": "/carddav/ (authentication required before the redirect)",
+      "source": "internal/app/carddav.go:51"
+    },
+    {
+      "method": "ANY",
+      "path": "/carddav",
+      "auth": "basic",
+      "source": "internal/app/carddav.go:52",
+      "allow": "OPTIONS, PROPFIND, REPORT, GET, HEAD, PUT, DELETE",
+      "dav": "1, addressbook",
+      "realm": "Taskboard CardDAV"
+    },
+    {
+      "method": "ANY",
+      "path": "/carddav/{path...}",
+      "auth": "basic",
+      "source": "internal/app/carddav.go:53"
+    }
+  ],
+  "pocketbaseRoutes": {
+    "note": "PocketBase also serves its own REST, realtime, admin and health API. The Taskboard routes above are added on the same router and do not collide.",
+    "rootCommand": "slopstack",
+    "authCollections": [
+      "users"
+    ],
+    "systemCollections": [
+      "_superusers",
+      "_externalAuths",
+      "_otps",
+      "_mfas",
+      "_authOrigins"
+    ]
+  },
+  "collections": [
+    {
+      "name": "address_books",
+      "id": "pbc_2492096707",
+      "type": "base",
+      "rules": {
+        "list": "@request.auth.id = owner",
+        "view": "@request.auth.id = owner",
+        "create": "@request.auth.id = owner",
+        "update": "@request.auth.id = owner",
+        "delete": "@request.auth.id = owner"
+      },
+      "ownerScoped": true,
+      "superuserOnly": false,
+      "ruleSummary": "owner",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "owner",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "color",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "app_passwords",
+      "id": "pbc_2899921234",
+      "type": "base",
+      "rules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "ownerScoped": false,
+      "superuserOnly": true,
+      "ruleSummary": "superuser",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "user",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "secret_hash",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "audit_logs",
+      "id": "pbc_681515208",
+      "type": "base",
+      "rules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "ownerScoped": false,
+      "superuserOnly": true,
+      "ruleSummary": "superuser",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "actor",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "metadata",
+          "type": "json",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "caldav_changes",
+      "id": "pbc_2483696242",
+      "type": "base",
+      "rules": {
+        "list": "@request.auth.id = owner",
+        "view": "@request.auth.id = owner",
+        "create": "@request.auth.id = owner",
+        "update": "@request.auth.id = owner",
+        "delete": "@request.auth.id = owner"
+      },
+      "ownerScoped": true,
+      "superuserOnly": false,
+      "ruleSummary": "owner",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "owner",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "calendar",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "href",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "resource_kind",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "resource_id",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "etag",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "sequence",
+          "type": "number",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "deleted",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "changed_at",
+          "type": "date",
+          "required": true,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "calendars",
+      "id": "pbc_3774112919",
+      "type": "base",
+      "rules": {
+        "list": "@request.auth.id = owner",
+        "view": "@request.auth.id = owner",
+        "create": "@request.auth.id = owner",
+        "update": "@request.auth.id = owner",
+        "delete": "@request.auth.id = owner"
+      },
+      "ownerScoped": true,
+      "superuserOnly": false,
+      "ruleSummary": "owner",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "owner",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "color",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "timezone",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "archived",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "is_default",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "carddav_changes",
+      "id": null,
+      "type": "base",
+      "present_in_live_db": false,
+      "declared_in": "apps/server/internal/app/carddav_changes.go",
+      "rules": {
+        "list": "@request.auth.id = owner",
+        "view": "@request.auth.id = owner",
+        "create": "@request.auth.id = owner",
+        "update": "@request.auth.id = owner",
+        "delete": "@request.auth.id = owner"
+      },
+      "ownerScoped": true,
+      "superuserOnly": false,
+      "ruleSummary": "owner",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "owner",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "address_book",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "href",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "etag",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "sequence",
+          "type": "number",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "deleted",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "changed_at",
+          "type": "date",
+          "required": true,
+          "hidden": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_carddav_changes_owner_sequence",
+          "columns": "owner, sequence",
+          "unique": false
+        },
+        {
+          "name": "idx_carddav_changes_owner_book_href",
+          "columns": "owner, address_book, href",
+          "unique": false
+        }
+      ]
+    },
+    {
+      "name": "contacts",
+      "id": "pbc_1930317162",
+      "type": "base",
+      "rules": {
+        "list": "@request.auth.id = owner",
+        "view": "@request.auth.id = owner",
+        "create": "@request.auth.id = owner",
+        "update": "@request.auth.id = owner",
+        "delete": "@request.auth.id = owner"
+      },
+      "ownerScoped": true,
+      "superuserOnly": false,
+      "ruleSummary": "owner",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "owner",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "address_book",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "uid",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "formatted_name",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "given_name",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "family_name",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "organization",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "phone",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "address",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "vcard",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "dav_href",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "events",
+      "id": "pbc_1687431684",
+      "type": "base",
+      "rules": {
+        "list": "@request.auth.id = owner",
+        "view": "@request.auth.id = owner",
+        "create": "@request.auth.id = owner",
+        "update": "@request.auth.id = owner",
+        "delete": "@request.auth.id = owner"
+      },
+      "ownerScoped": true,
+      "superuserOnly": false,
+      "ruleSummary": "owner",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "owner",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "end_date",
+          "type": "date",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "all_day",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "uid",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "dtstamp",
+          "type": "date",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "duration",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "location",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "categories",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "rrule",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "exdate",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "organizer",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "attendees",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "class",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "geo",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "alarm",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "start_local",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "end_local",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "calendar",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "timezone",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "time_mode",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "recurrence_parent",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "recurrence_id",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "recurrence_cancelled",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "dav_href",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "group_members",
+      "id": "pbc_714390402",
+      "type": "base",
+      "rules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "ownerScoped": false,
+      "superuserOnly": true,
+      "ruleSummary": "superuser",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "group",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "user",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "group_permissions",
+      "id": "pbc_2509884351",
+      "type": "base",
+      "rules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "ownerScoped": false,
+      "superuserOnly": true,
+      "ruleSummary": "superuser",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "group",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "permission",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "groups",
+      "id": "pbc_3346940990",
+      "type": "base",
+      "rules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "ownerScoped": false,
+      "superuserOnly": true,
+      "ruleSummary": "superuser",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "lists",
+      "id": "pbc_3277857102",
+      "type": "base",
+      "rules": {
+        "list": "@request.auth.id = owner",
+        "view": "@request.auth.id = owner",
+        "create": "@request.auth.id = owner",
+        "update": "@request.auth.id = owner",
+        "delete": "@request.auth.id = owner"
+      },
+      "ownerScoped": true,
+      "superuserOnly": false,
+      "ruleSummary": "owner",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "owner",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "color",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "archived",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "is_default",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "notifications",
+      "id": "pbc_2301922722",
+      "type": "base",
+      "rules": {
+        "list": "@request.auth.id = owner",
+        "view": "@request.auth.id = owner",
+        "create": "@request.auth.id = owner",
+        "update": "@request.auth.id = owner",
+        "delete": "@request.auth.id = owner"
+      },
+      "ownerScoped": true,
+      "superuserOnly": false,
+      "ruleSummary": "owner",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "owner",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "target_kind",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "target_id",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "reminder_key",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "read",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "read_at",
+          "type": "date",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "snoozed_until",
+          "type": "date",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "dismissed_at",
+          "type": "date",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "permissions",
+      "id": "pbc_3709660955",
+      "type": "base",
+      "rules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "ownerScoped": false,
+      "superuserOnly": true,
+      "ruleSummary": "superuser",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "category",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "reminders",
+      "id": "pbc_163143500",
+      "type": "base",
+      "rules": {
+        "list": "@request.auth.id = owner",
+        "view": "@request.auth.id = owner",
+        "create": "@request.auth.id = owner",
+        "update": "@request.auth.id = owner",
+        "delete": "@request.auth.id = owner"
+      },
+      "ownerScoped": true,
+      "superuserOnly": false,
+      "ruleSummary": "owner",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "owner",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "key",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "target_kind",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "target_id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "at",
+          "type": "date",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "offset",
+          "type": "number",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "due_at",
+          "type": "date",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "channel",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "attempts",
+          "type": "number",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "next_attempt_at",
+          "type": "date",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "last_error",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "delivered_at",
+          "type": "date",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "todos",
+      "id": "pbc_113564862",
+      "type": "base",
+      "rules": {
+        "list": "@request.auth.id = owner",
+        "view": "@request.auth.id = owner",
+        "create": "@request.auth.id = owner",
+        "update": "@request.auth.id = owner",
+        "delete": "@request.auth.id = owner"
+      },
+      "ownerScoped": true,
+      "superuserOnly": false,
+      "ruleSummary": "owner",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "owner",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "completed",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "due_date",
+          "type": "date",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "uid",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "dtstamp",
+          "type": "date",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "duration",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "completed_at",
+          "type": "date",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "percent_complete",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "priority",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "categories",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "rrule",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "exdate",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "organizer",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "attendees",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "class",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "geo",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "alarm",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "start_local",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "list",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "calendar",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "timezone",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "time_mode",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "due_local",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "dav_href",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "user_permissions",
+      "id": "pbc_2593766271",
+      "type": "base",
+      "rules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "ownerScoped": false,
+      "superuserOnly": true,
+      "ruleSummary": "superuser",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "user",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "permission",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "denied",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "users",
+      "id": "_pb_users_auth_",
+      "type": "auth",
+      "rules": {
+        "list": "id = @request.auth.id",
+        "view": "id = @request.auth.id",
+        "create": "",
+        "update": "id = @request.auth.id",
+        "delete": "id = @request.auth.id"
+      },
+      "ownerScoped": false,
+      "superuserOnly": false,
+      "ruleSummary": "self",
+      "fields": [
+        {
+          "name": "id",
+          "type": "text",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "password",
+          "type": "password",
+          "required": true,
+          "hidden": true
+        },
+        {
+          "name": "tokenKey",
+          "type": "text",
+          "required": true,
+          "hidden": true
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "emailVisibility",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "verified",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "avatar",
+          "type": "file",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "isAdmin",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "activation_code",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "registration_status",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "display_name",
+          "type": "text",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "disabled",
+          "type": "bool",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    }
+  ],
+  "collectionCount": 18,
+  "declaredNotInLiveDb": [
+    "carddav_changes"
+  ],
+  "schemaDrift": {
+    "migrationsOnDisk": 18,
+    "migrationsAppliedToLiveDb": 16,
+    "appliedMigrationsLast": "20260915000000_add_todo_calendar.go",
+    "pendingMigrations": [
+      "20260920000000_add_dav_resource_data.go",
+      "20260920000001_add_carddav_change_journal.go"
+    ],
+    "fieldsDeclaredInSchemaGoButAbsentFromLiveDb": [
+      "todos.dav_data",
+      "events.dav_data"
+    ],
+    "collectionsDeclaredInSchemaGoButAbsentFromLiveDb": [
+      "carddav_changes"
+    ],
+    "declaredButNeverWritten": [
+      "audit_logs"
+    ],
+    "note": "apps/server/pb_data has not been booted since the 20260920 migrations were added. Do not infer the production schema from this database."
+  },
+  "bootstrapOrder": [
+    "cleanupTransientBackupArchives",
+    "RunAppMigrations",
+    "EnsureCollections",
+    "EnsureNotificationCollections",
+    "EnsureCalDAVChanges",
+    "EnsureCardDAVChanges",
+    "applyBackupConfig"
+  ],
+  "authFlows": {
+    "primary": {
+      "mechanism": "PocketBase password auth",
+      "loginRoute": null,
+      "note": "Taskboard registers no login route. PocketBase owns sessions, verification and password reset."
+    },
+    "registration": {
+      "hook": "OnRecordCreateRequest(\"users\") in internal/app/app.go:152",
+      "modes": [
+        "disabled",
+        "approval",
+        "otp"
+      ],
+      "invariants": [
+        "non-superuser create forces isAdmin=false and disabled=true",
+        "mode=disabled returns 403 'registration is disabled'",
+        "mode=approval sets registration_status='awaiting_approval'",
+        "mode=otp sets activation_code (6 random decimal digits) and registration_status='awaiting_activation' and logs the code to stdout",
+        "non-superuser update can never change isAdmin (reset to Original())"
+      ]
+    },
+    "guest": {
+      "route": "POST /api/auth/guest",
+      "condition": "registered only when SLOPSTACK_DEVELOPMENT=true",
+      "email": "guest@taskboard.local",
+      "behaviour": "idempotent; repairs disabled/isAdmin/unverified back to active"
+    },
+    "appPassword": {
+      "collection": "app_passwords",
+      "algorithm": "bcrypt (DefaultCost)",
+      "secretBytes": 24,
+      "encoding": "base64url raw",
+      "usernameIs": "user email address",
+      "exportedFunc": "AuthenticateAppPassword(app, username, password, clientIP ...string)",
+      "throttle": {
+        "windowMinutes": 15,
+        "maxFailures": 3,
+        "initialBlockSeconds": 1,
+        "maxBlockSeconds": 60,
+        "maxTrackedEntries": 4096,
+        "keys": [
+          "username",
+          "ip (optional)",
+          "user"
+        ]
+      },
+      "errorOnAnyFailure": "errInvalidAppPassword"
+    },
+    "authorization": {
+      "func": "Authorize(event, permission)",
+      "currentBehaviour": "401 if unauthenticated; allow superuser; otherwise 403 'missing permission: <permission>'",
+      "status": "stub - no groups/permissions lookup implemented",
+      "unusedCollections": [
+        "groups",
+        "permissions",
+        "group_members",
+        "group_permissions",
+        "user_permissions"
+      ]
+    },
+    "ownership": {
+      "collections": [
+        "todos",
+        "events",
+        "lists",
+        "calendars",
+        "contacts"
+      ],
+      "rules": [
+        "unauthenticated non-superuser create/update/delete => 401",
+        "create overwrites owner with e.Auth.Id",
+        "update/delete where Original().owner != e.Auth.Id => 403 'record is not owned by the current user'",
+        "todos require an owned non-archived 'list'; events require an owned non-archived 'calendar'",
+        "deleting a non-empty lists/calendars container => 400 'non-empty containers must be archived'",
+        "deleting an events master also deletes its recurrence_parent overrides",
+        "contacts require an owned address_book"
+      ]
+    },
+    "defaultProvisioning": {
+      "hook": "OnRecordAfterCreateSuccess(\"users\")",
+      "isDefault": true,
+      "creates": [
+        {
+          "collection": "lists",
+          "name": "Tasks",
+          "color": "#87c4a8"
+        },
+        {
+          "collection": "calendars",
+          "name": "Events and Holidays",
+          "color": "#3b6ea8"
+        },
+        {
+          "collection": "address_books",
+          "name": "Contacts",
+          "color": "#7657a8"
+        }
+      ]
+    },
+    "dav": {
+      "transport": "HTTP Basic",
+      "usernameIs": "user email address",
+      "passwordIs": "app password"
+    }
+  },
+  "backupSubsystem": {
+    "keyFile": ".backup-encryption-key",
+    "keyLocation": "<dataDir>/.backup-encryption-key",
+    "keyMode": "0600",
+    "keyDirMode": "0700",
+    "keyBytes": 32,
+    "keyEncoding": "base64url raw",
+    "cipher": "AES-GCM",
+    "artifacts": [
+      "*.zip.enc",
+      "*.json.enc"
+    ],
+    "namePatterns": {
+      "manual": "manual_<20060102_150405_000000000>",
+      "scheduled": "scheduled_<stamp>",
+      "restoreValidation": "^@?[a-z0-9_-]+\\.zip(\\.enc)?$",
+      "maxNameLength": 150
+    },
+    "cli": [
+      {
+        "path": "slopstack openapi export",
+        "note": "writes openapi/openapi.json"
+      },
+      {
+        "path": "slopstack backup create"
+      },
+      {
+        "path": "slopstack backup json"
+      },
+      {
+        "path": "slopstack backup key-init",
+        "note": "prints the key once"
+      },
+      {
+        "path": "slopstack backup key-import",
+        "note": "reads from stdin, max 1024 bytes"
+      },
+      {
+        "path": "slopstack backup list"
+      },
+      {
+        "path": "slopstack backup restore <exact-name> --confirm"
+      }
+    ],
+    "scheduler": {
+      "cronJobName": "encrypted-backups",
+      "cronEnv": "SLOPSTACK_BACKUP_CRON",
+      "defaultCron": "0 3 * * *",
+      "maxKeepEnv": "SLOPSTACK_BACKUP_MAX_KEEP",
+      "defaultMaxKeep": 14,
+      "pruneSuffixes": [
+        ".zip.enc",
+        ".json.enc"
+      ]
+    },
+    "pocketbaseSettings": {
+      "Backups.Cron": "always forced to the empty string; PocketBase cron backups are disabled",
+      "Backups.S3": "configured from SLOPSTACK_BACKUP_S3_*"
+    },
+    "restoreRestartEnvVar": "SLOPSTACK_BACKUP_RESTORE_RESTARTED"
+  },
+  "configuration": {
+    "env": {
+      "SLOPSTACK_HTTP_ADDRESS": {
+        "default": "0.0.0.0:8090",
+        "consumed": true
+      },
+      "SLOPSTACK_PUBLIC_URL": {
+        "default": "http://localhost:8090",
+        "consumed": true
+      },
+      "SLOPSTACK_SECURE_COOKIES": {
+        "default": "false",
+        "consumed": false
+      },
+      "SLOPSTACK_LOG_LEVEL": {
+        "default": "info",
+        "consumed": false
+      },
+      "SLOPSTACK_REGISTRATION_ENABLED": {
+        "default": "true",
+        "consumed": true
+      },
+      "SLOPSTACK_REGISTRATION_MODE": {
+        "default": "approval",
+        "consumed": true
+      },
+      "SLOPSTACK_STORAGE_PATH": {
+        "default": "pb_data",
+        "consumed": true
+      },
+      "SLOPSTACK_DEVELOPMENT": {
+        "default": "false",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_ENABLED": {
+        "default": "false",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_JSON_ENABLED": {
+        "default": "false",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_CRON": {
+        "default": "0 3 * * *",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_MAX_KEEP": {
+        "default": "14",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_S3_ENABLED": {
+        "default": "false",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_S3_BUCKET": {
+        "default": "",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_S3_REGION": {
+        "default": "",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_S3_ENDPOINT": {
+        "default": "",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_S3_ACCESS_KEY": {
+        "default": "",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_S3_SECRET": {
+        "default": "",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_S3_FORCE_PATH_STYLE": {
+        "default": "false",
+        "consumed": true
+      },
+      "SLOPSTACK_BACKUP_RESTORE_RESTARTED": {
+        "default": "",
+        "consumed": true,
+        "internal": true
+      }
+    }
+  },
+  "webRoutes": [
+    {
+      "path": "/",
+      "component": "UpcomingTab"
+    },
+    {
+      "path": "/calendar",
+      "component": "CalendarTab",
+      "searchParams": [
+        "month"
+      ]
+    },
+    {
+      "path": "/lists",
+      "component": "ListsTab"
+    },
+    {
+      "path": "/people",
+      "component": "PeopleTab"
+    },
+    {
+      "path": "/search",
+      "component": "SearchTab"
+    },
+    {
+      "path": "/settings",
+      "component": "SettingsTab"
+    },
+    {
+      "path": "/auth/login",
+      "component": "AuthScreen"
+    },
+    {
+      "path": "/auth/register",
+      "component": "AuthScreen"
+    }
+  ],
+  "openapi": {
+    "generatedPath": "openapi/openapi.json",
+    "gitignored": true,
+    "generator": "go run ./apps/server/cmd/slopstack openapi export",
+    "clientGenerator": "@hey-api/openapi-ts",
+    "clientOutput": "apps/web/src/api/generated",
+    "clientOutputGitignored": true,
+    "operationCount": 1,
+    "operations": [
+      {
+        "operationId": "listTodos",
+        "method": "GET",
+        "path": "/api/todos",
+        "schema": "Todo{id,title,completed}",
+        "security": [
+          "pocketbaseAuth"
+        ]
+      }
+    ],
+    "securitySchemes": [
+      "pocketbaseAuth"
+    ],
+    "note": "Every /api/* route except listTodos is absent from the generated contract."
+  },
+  "inheritedButUnused": {
+    "webUiComponentsTotal": 60,
+    "webUiComponentsUsed": [
+      "button",
+      "command",
+      "input",
+      "label",
+      "switch",
+      "tabs",
+      "textarea",
+      "tooltip"
+    ],
+    "webUiComponentsUnused": [
+      "accordion",
+      "alert",
+      "alert-dialog",
+      "aspect-ratio",
+      "attachment",
+      "avatar",
+      "badge",
+      "breadcrumb",
+      "bubble",
+      "button-group",
+      "calendar",
+      "card",
+      "carousel",
+      "chart",
+      "checkbox",
+      "collapsible",
+      "combobox",
+      "context-menu",
+      "dialog",
+      "direction",
+      "drawer",
+      "dropdown-menu",
+      "empty",
+      "field",
+      "hover-card",
+      "input-group",
+      "input-otp",
+      "item",
+      "kbd",
+      "marker",
+      "menubar",
+      "message",
+      "message-scroller",
+      "native-select",
+      "navigation-menu",
+      "pagination",
+      "popover",
+      "progress",
+      "radio-group",
+      "resizable",
+      "scroll-area",
+      "select",
+      "separator",
+      "sheet",
+      "sidebar",
+      "skeleton",
+      "slider",
+      "sonner",
+      "spinner",
+      "table",
+      "toggle",
+      "toggle-group"
+    ],
+    "hooksUnused": [
+      "hooks/use-mobile.ts (only imported by the unused components/ui/sidebar.tsx)"
+    ],
+    "serverUnused": [
+      "internal/app/authorization.go - Authorize() is a stub and no route calls it",
+      "collections groups/permissions/group_members/group_permissions/user_permissions are never read",
+      "audit_logs collection is declared in schema.go but written by no code",
+      "Config.SecureCookies and Config.LogLevel are parsed but never read",
+      "GET /api/todos returns a hard-coded empty array",
+      "stale comment in search.go:73 claiming registerSearchRoutes is not wired up (it is)",
+      "stale comment in occurrences.go:51 claiming registerOccurrenceRoutes is not wired up (it is)"
+    ]
+  },
+  "dataLocations": {
+    "primaryDataDir": "apps/server/pb_data",
+    "primaryDatabase": "apps/server/pb_data/data.db",
+    "primaryAuxiliary": "apps/server/pb_data/auxiliary.db",
+    "strayDataDir": "pb_data",
+    "strayDatabase": "pb_data/data.db",
+    "strayNote": "Second, independent database created by running the binary from the repo root. Its schema was not verified to match the primary. Do not delete without a decision.",
+    "buildTmpDir": "apps/server/tmp",
+    "gitignored": [
+      "pb_data/",
+      "*.db",
+      "*.db-shm",
+      "*.db-wal",
+      "openapi/openapi.json",
+      "apps/web/src/api/generated/"
+    ]
+  },
+  "ci": {
+    "workflows": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/release.yml"
+    ],
+    "ciSteps": [
+      "pnpm install --frozen-lockfile",
+      "pnpm lint",
+      "pnpm test",
+      "pnpm build",
+      "go test ./...",
+      "pnpm generate:api",
+      "pnpm generate:client",
+      "git diff --exit-code"
+    ],
+    "gofmtCheck": false,
+    "golangciLint": false,
+    "baselineDiffJob": "baseline.json is generated and reviewed manually; see docs/AGENT-NOTES.md for the CI job that still needs writing"
+  }
+}

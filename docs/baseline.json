@@ -2252,18 +2252,30 @@
       ".github/workflows/ci.yml",
       ".github/workflows/release.yml"
     ],
+    "pinnedToolVersions": {
+      "go": "1.27.1",
+      "node": "22.23.2",
+      "pnpm": "11.8.0"
+    },
     "ciSteps": [
       "pnpm install --frozen-lockfile",
+      "go build ./... (apps/server)",
+      "go test ./... (apps/server)",
+      "gofmt check on apps/server",
       "pnpm lint",
       "pnpm test",
       "pnpm build",
-      "go test ./...",
       "pnpm generate:api",
       "pnpm generate:client",
-      "git diff --exit-code"
+      "git diff --exit-code",
+      "python3 scripts/check-baseline.py"
     ],
-    "gofmtCheck": false,
+    "baselineCheckScript": "scripts/check-baseline.py",
+    "baselineCheckCovers": [
+      "route table (docs/baseline.json routes vs e.Router.* in apps/server/internal/app)",
+      "pinned tool versions in .github/workflows/ci.yml vs toolVersions"
+    ],
     "golangciLint": false,
-    "baselineDiffJob": "baseline.json is generated and reviewed manually; see docs/AGENT-NOTES.md for the CI job that still needs writing"
+    "golangciConfigPresent": ".golangci.yml exists but is not run in CI"
   }
 }

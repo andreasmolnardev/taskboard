@@ -38,11 +38,15 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 		if err := EnsureCalDAVChanges(e.App); err != nil {
 			return err
 		}
+		if err := EnsureCardDAVChanges(e.App); err != nil {
+			return err
+		}
 		return applyBackupConfig(e.App, config)
 	})
 	protectUserAdminFlag(pb, config)
 	registerOwnershipHooks(pb)
 	registerCalDAVChangeHooks(pb)
+	registerCardDAVChangeHooks(pb)
 	registerReminderScheduler(pb)
 	registerEncryptedBackupScheduler(pb, config)
 	pb.OnRecordAfterCreateSuccess("users").BindFunc(func(e *core.RecordEvent) error {

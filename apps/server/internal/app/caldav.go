@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -143,7 +144,7 @@ func calDAVPropfind(event *core.RequestEvent, user *core.Record) error {
 	if depth == "" {
 		depth = "infinity"
 	}
-	if depth != "0" && depth != "1" {
+	if depth != "0" && depth != "1" && depth != "infinity" {
 		return event.Blob(http.StatusForbidden, "application/xml; charset=utf-8", []byte(`<?xml version="1.0"?><d:error xmlns:d="DAV:"><d:propfind-finite-depth/></d:error>`))
 	}
 	request, err := readCalDAVXML(event)
@@ -154,7 +155,7 @@ func calDAVPropfind(event *core.RequestEvent, user *core.Record) error {
 	if path.kind == "" || (path.userID != "" && path.userID != user.Id) {
 		return event.NotFoundError("DAV resource not found", nil)
 	}
-	responses, err := calDAVProperties(event.App, user, path, depth == "1", request)
+	responses, err := calDAVProperties(event.App, user, path, depth != "0", request)
 	if err != nil {
 		return err
 	}
@@ -242,6 +243,8 @@ func calendarProperties(calendar *core.Record) map[xml.Name]string {
 		davName("current-user-privilege-set"):          `<d:privilege><d:all/></d:privilege>`,
 		davName("getcontenttype"):                      "text/calendar",
 		calDAVName("supported-calendar-component-set"): `<c:comp name="VEVENT"/><c:comp name="VTODO"/>`,
+		calDAVName("supported-calendar-data"):          `<c:calendar-data content-type="text/calendar" version="2.0"/>`,
+		calDAVName("max-resource-size"):                fmt.Sprintf("%d", maxCalDAVRequestSize),
 		appleName("calendar-color"):                    xmlText(calendar.GetString("color")),
 		calDAVName("calendar-description"):             xmlText(calendar.GetString("description")),
 	}
@@ -355,6 +358,10 @@ func calDAVPut(event *core.RequestEvent, user *core.Record) error {
 	if _, err := ownedCalendar(event.App, user.Id, path.calendarID); err != nil {
 		return event.NotFoundError("calendar not found", nil)
 	}
+	mediaType, _, contentTypeErr := mime.ParseMediaType(event.Request.Header.Get("Content-Type"))
+	if contentTypeErr != nil || (mediaType != "" && !strings.EqualFold(mediaType, "text/calendar")) {
+		return event.BadRequestError("Content-Type must be text/calendar", nil)
+	}
 	event.Request.Body = http.MaxBytesReader(event.Response, event.Request.Body, maxCalDAVRequestSize)
 	data, err := io.ReadAll(event.Request.Body)
 	if err != nil {
@@ -380,6 +387,10 @@ func calDAVPut(event *core.RequestEvent, user *core.Record) error {
 	uid := strings.TrimSpace(calendarText(component, ical.PropUID))
 	if uid == "" {
 		return event.BadRequestError("calendar component UID is required", nil)
+	}
+	storedData, err := encodeICalendar(calendar)
+	if err != nil {
+		return event.BadRequestError("invalid calendar resource", err)
 	}
 
 	requestedHref := path.resourceName
@@ -437,15 +448,21 @@ func calDAVPut(event *core.RequestEvent, user *core.Record) error {
 		if err != nil {
 			return calDAVPutFailure{status: http.StatusBadRequest, message: "invalid calendar component: " + err.Error()}
 		}
+		var record *core.Record
 		if existing != nil {
-			saved = existing
-			return nil
+			record = existing
+		} else {
+			records, findErr := txApp.FindRecordsByFilter(collection, "owner = {:owner} && dav_href = {:href}", "", 1, 0, dbx.Params{"owner": user.Id, "href": requestedHref})
+			if findErr != nil || len(records) != 1 {
+				return fmt.Errorf("saved calendar resource cannot be resolved")
+			}
+			record = records[0]
 		}
-		records, findErr := txApp.FindRecordsByFilter(collection, "owner = {:owner} && dav_href = {:href}", "", 1, 0, dbx.Params{"owner": user.Id, "href": requestedHref})
-		if findErr != nil || len(records) != 1 {
-			return fmt.Errorf("saved calendar resource cannot be resolved")
+		record.Set("dav_data", string(storedData))
+		if err := txApp.Save(record); err != nil {
+			return err
 		}
-		saved = records[0]
+		saved = record
 		return nil
 	})
 	if err != nil {
@@ -671,6 +688,10 @@ func filterCalDAVResources(resources []calDAVResource, filters []calDAVComponent
 		if (want == "VEVENT" && resource.kind != "events") || (want == "VTODO" && resource.kind != "todos") {
 			continue
 		}
+		calendarComponent, componentErr := calDAVFilterComponent(resource)
+		if componentErr != nil || !calDAVComponentMatches(calendarComponent, component) {
+			continue
+		}
 		if component.TimeRange != nil {
 			if resource.kind == "events" && recordHasRecurrence(resource.record) && startOK && endOK {
 				calendarComponent, err := occurrenceComponent(resource.record)
@@ -704,8 +725,62 @@ func parseCalDAVReportTime(value *calDAVTimeRange, start bool) (time.Time, bool)
 	if raw == "" {
 		return time.Time{}, false
 	}
-	parsed, err := time.Parse("20060102T150405Z", raw)
-	return parsed, err == nil
+	for _, layout := range []string{"20060102T150405Z", "20060102T150405", "20060102"} {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func calDAVFilterComponent(resource calDAVResource) (*ical.Component, error) {
+	calendar, err := ical.NewDecoder(bytes.NewReader(resource.data)).Decode()
+	if err != nil {
+		return nil, err
+	}
+	return calDAVResourceComponent(calendar)
+}
+
+func calDAVComponentMatches(component *ical.Component, filter *calDAVComponentFilter) bool {
+	if component == nil || filter == nil {
+		return true
+	}
+	if filter.Name != "" && !strings.EqualFold(filter.Name, component.Name) {
+		return false
+	}
+	for _, propertyFilter := range filter.PropFilters {
+		properties := component.Props.Values(strings.ToUpper(propertyFilter.Name))
+		if propertyFilter.IsNotDefined != nil {
+			if len(properties) > 0 {
+				return false
+			}
+			continue
+		}
+		matched := propertyFilter.TextMatch == nil && len(properties) > 0
+		for _, property := range properties {
+			if propertyFilter.TextMatch == nil || calDAVTextMatches(property.Value, *propertyFilter.TextMatch) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+func calDAVTextMatches(value string, match calDAVTextMatch) bool {
+	value = strings.ToLower(value)
+	needle := strings.ToLower(match.Value)
+	switch strings.ToLower(match.MatchType) {
+	case "starts-with":
+		return strings.HasPrefix(value, needle)
+	case "ends-with":
+		return strings.HasSuffix(value, needle)
+	default:
+		return strings.Contains(value, needle)
+	}
 }
 
 func resourceTimeRange(resource calDAVResource) (time.Time, time.Time) {
@@ -830,6 +905,11 @@ func makeCalDAVResource(record *core.Record, kind, userID, calendarID string) (c
 	if err != nil {
 		return calDAVResource{}, err
 	}
+	if stored := record.GetString("dav_data"); stored != "" {
+		if preserved, ok := preservedCalDAVData(stored, component); ok {
+			data = preserved
+		}
+	}
 	hrefName := record.GetString("dav_href")
 	if hrefName == "" {
 		hrefName = prefix + record.Id + ".ics"
@@ -844,6 +924,49 @@ func encodeICalendar(calendar *ical.Calendar) ([]byte, error) {
 		return nil, err
 	}
 	return output.Bytes(), nil
+}
+
+func preservedCalDAVData(raw string, generated *ical.Component) ([]byte, bool) {
+	stored, err := ical.NewDecoder(strings.NewReader(raw)).Decode()
+	if err != nil {
+		return nil, false
+	}
+	storedComponent, err := calDAVResourceComponent(stored)
+	if err != nil || !sameCalDAVKnownProperties(storedComponent, generated) {
+		return nil, false
+	}
+	return []byte(raw), true
+}
+
+func sameCalDAVKnownProperties(left, right *ical.Component) bool {
+	known := []string{
+		ical.PropUID, ical.PropSummary, ical.PropDescription, ical.PropStatus,
+		ical.PropDateTimeStart, ical.PropDateTimeEnd, ical.PropDue, ical.PropDuration,
+		ical.PropRecurrenceRule, ical.PropExceptionDates, ical.PropRecurrenceDates,
+		ical.PropCategories, ical.PropOrganizer, ical.PropAttendee, ical.PropURL,
+		ical.PropClass, ical.PropGeo, ical.PropLocation, ical.PropRecurrenceID,
+		ical.PropPriority, ical.PropPercentComplete, ical.PropCompleted,
+	}
+	for _, name := range known {
+		if !sameCalDAVProperties(left, right, name) {
+			return false
+		}
+	}
+	return len(left.Children) == len(right.Children)
+}
+
+func sameCalDAVProperties(left, right *ical.Component, name string) bool {
+	leftValues := left.Props.Values(name)
+	rightValues := right.Props.Values(name)
+	if len(leftValues) != len(rightValues) {
+		return false
+	}
+	for index := range leftValues {
+		if leftValues[index].Value != rightValues[index].Value || leftValues[index].ValueType() != rightValues[index].ValueType() || leftValues[index].Params.Get(ical.PropTimezoneID) != rightValues[index].Params.Get(ical.PropTimezoneID) {
+			return false
+		}
+	}
+	return true
 }
 
 func calendarETag(data []byte) string {

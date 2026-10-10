@@ -35,9 +35,22 @@ type calDAVFilter struct {
 }
 
 type calDAVComponentFilter struct {
-	Name       string                  `xml:"name,attr"`
-	TimeRange  *calDAVTimeRange        `xml:"time-range"`
-	Components []calDAVComponentFilter `xml:"comp-filter"`
+	Name        string                  `xml:"name,attr"`
+	TimeRange   *calDAVTimeRange        `xml:"time-range"`
+	Components  []calDAVComponentFilter `xml:"comp-filter"`
+	PropFilters []calDAVPropFilter      `xml:"prop-filter"`
+}
+
+type calDAVPropFilter struct {
+	Name         string           `xml:"name,attr"`
+	IsNotDefined *struct{}        `xml:"is-not-defined"`
+	TextMatch    *calDAVTextMatch `xml:"text-match"`
+}
+
+type calDAVTextMatch struct {
+	Collation string `xml:"collation,attr"`
+	MatchType string `xml:"match-type,attr"`
+	Value     string `xml:",chardata"`
 }
 
 type calDAVTimeRange struct {

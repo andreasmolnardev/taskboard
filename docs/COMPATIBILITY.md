@@ -499,11 +499,16 @@ databases and are not equivalent to a fresh migration run.
 
 ## Synthetic legacy-schema regression
 
-`go test ./apps/server -run TestSyntheticLegacyTaskboardSchemaUpgradePreservesRecords -count=1`
-uses `tests.NewTestApp()` to create a disposable database, seeds an existing user,
-todo, event, and contact using an older Taskboard schema, and runs the registered
-app migrations plus the current bootstrap schema repairs twice. It asserts that
-collection IDs, record IDs, and representative values survive and that newer
-fields are added. This is synthetic legacy-schema coverage; it does not replace
-the Phase 7 requirement to test disposable copies of populated real-schema
-databases from older releases, including restore.
+`go test ./apps/server -run TestHistoricalTaskboardBackupUpgradePreservesRecords -count=1`
+uses `tests.NewTestApp()` to create a disposable database, runs the registered
+app migrations only through the `20260915000000_add_todo_calendar.go` cutoff,
+seeds a user, todo, event, and contact, then archives and extracts it into a
+separate temporary data directory. It applies the pending registered migrations
+and current bootstrap schema repairs twice,
+asserting that collection IDs, record IDs, and representative values survive
+and that newer fields and the CardDAV journal are added. Because some older
+migration callbacks call the live `EnsureCollections` repair function, the
+fixture removes schema introduced after the selected cutoff before archiving.
+This is reproducible migration-history coverage, not a database produced by an
+older released binary; Phase 7 still requires validating disposable copies of
+populated real-schema databases from older releases, including restore.

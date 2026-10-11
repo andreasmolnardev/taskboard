@@ -38,7 +38,7 @@ Counts across all 44 `.go` files in the three packages (24 non-test in
 | `backup_scheduler.go` | 84 | `pkg/backup` | Generic cron + retention pruning of `.zip.enc`/`.json.enc`. Purely filesystem/PocketBase. |
 | `backup_command.go` | 230 | `pkg/backup` | Cobra command tree. Generic except for the `SLOPSTACK_BACKUP_RESTORE_RESTARTED` env var name and the `.json` subcommand (Taskboard-specific export format). Flagged: it depends on `loadBackupKey`/`createEncryptedArchive` so it must move together with the two files above. |
 | `auth.go` | 24 | `pkg/auth` | `CurrentUser()` is generic; the three `RegistrationRequires*` helpers wrap `Config.RegistrationMode` and would need a config abstraction. |
-| `authorization.go` | 15 | `pkg/auth` | `Authorize()` is the intended single enforcement point. Currently a stub (superuser-or-deny) — extract the *interface*, then implement the group lookup once, here, for every derived app. |
+| `authorization.go` | 15 | `pkg/auth` | **Phase 0 snapshot:** `Authorize()` was a stub (superuser-or-deny). The current wrapper delegates to shared authorization rule loading/evaluation, but no route calls it; see current status in `docs/ARCHITECTURE.md` §4. |
 | `guest_auth.go` | 49 | `pkg/auth` | Generic dev-only guest bootstrap. Taskboard-specific: the email literal `guest@taskboard.local`. That is the only reason it is not listed as unconditionally CORE — make the address configurable and it is pure. |
 | `app_passwords.go` | 150 | `pkg/auth` | HTTP Basic app-password auth + CRUD routes. The *routes* are Taskboard-shaped (`/api/auth/app-passwords`), the auth core is generic. Strong CORE candidate for the auth part; the route handlers need a mount-point parameter. |
 | `app_password_throttle.go` | 130 | `pkg/auth` | Pure in-memory sliding-window limiter. Zero domain knowledge. |
@@ -241,9 +241,10 @@ Explicitly **not** extracting: `caldav.go`, `carddav.go`, `vcard.go`,
 - **`notifications.go`.** Three concerns in 506 lines; cannot move whole.
 - **`audit_logs`.** Declared in `schema.go`, written by nothing. Not classifiable
   as an extraction candidate because there is no code — it is dead schema.
-- **`authorization.go`.** Classified CORE as a stub. Once groups/permissions are
-  implemented it becomes much more valuable to share, but that implementation is
-  new work, not extraction.
+- **`authorization.go`.** **Phase 0 snapshot:** classified CORE as a stub. The
+  current wrapper delegates to shared rule loading/evaluation but has no route
+  callers; see `docs/ARCHITECTURE.md` §4. The implementation is already shared,
+  so the remaining work is wiring routes, not extracting it.
 - **`app_passwords.go`.** The auth core is CORE; the three HTTP routes are
   Taskboard-shaped. Needs a mount point parameter before it can move.
 - **Cross-repo direction.** The premise "Piggybudget evolved from Taskboard" does

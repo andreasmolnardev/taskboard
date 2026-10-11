@@ -346,9 +346,9 @@ dead through two hops.
 | item | evidence |
 | --- | --- |
 | `audit_logs` collection | declared at `schema.go:27`, **never written or read by any code**. `grep -rn 'audit_logs\|auditLog' apps/server --include=*.go` returns exactly one hit — the declaration. Dead schema. |
-| `Authorize()` (`internal/app/authorization.go`) | **zero callers**: `grep -rn 'Authorize(' apps/server --include=*.go \| grep -v 'func Authorize'` is empty. Dead *and* it would deny every non-superuser if it were ever wired in. Enforcement today comes from PocketBase API rules + `registerOwnershipHooks`. |
+| `Authorize()` (`internal/app/authorization.go`) | **Phase 0 historical finding:** zero callers and a stub that denied non-superusers. The current wrapper delegates to shared Slopstack rule loading/evaluation, reading direct user grants, group memberships, and group grants; it still has **zero route callers**. Enforcement on current routes comes from PocketBase API rules + `registerOwnershipHooks`. |
 | Todo HTTP API | **Resolved since the Phase 0 audit:** five Huma operations now provide owner-scoped list/create/read/update/delete handlers through the PocketBase router bridge. See `docs/COMPATIBILITY.md` §Current runtime snapshot. |
-| `groups`, `permissions`, `group_members`, `group_permissions`, `user_permissions` | collections exist with empty (superuser-only) API rules and are never read by any handler. Scaffolding. |
+| `groups`, `permissions`, `group_members`, `group_permissions`, `user_permissions` | **Phase 0 historical finding:** none were read by handlers. The current uncalled `Authorize()` wrapper reads `group_members`, `group_permissions`, and `user_permissions`; the `groups` and `permissions` collections remain unloaded. |
 | `Config.SecureCookies`, `Config.LogLevel` | declared (`config.go:22,24`), populated from `SLOPSTACK_SECURE_COOKIES` / `SLOPSTACK_LOG_LEVEL` (`config.go:48,50`), and **read nowhere** in the server. Setting them does nothing. |
 
 ### 4.3 Build/CI leftovers

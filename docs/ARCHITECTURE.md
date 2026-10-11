@@ -226,7 +226,7 @@ Server-side inherited-but-unused:
 
 | item | note |
 | --- | --- |
-| `internal/app/authorization.go` | `Authorize()` exists and is a stub: it allows superusers and **forbids everyone else**; no group or `permissions`/`user_permissions` lookup is implemented. `groups`, `permissions`, `group_members`, `group_permissions`, `user_permissions` collections exist with **empty API rules** (admin-only via PocketBase superuser) but are never read by any route. |
+| `internal/app/authorization.go` | `Authorize()` calls the shared Slopstack authorization package to load direct user grants, group memberships, and group grants, then evaluate them (explicit user denies override grants and superuser access). No current route calls this wrapper. The `groups` and `permissions` collections themselves are not loaded. |
 | `search.go:73` comment | says `registerSearchRoutes` "is intentionally not wired into `registerRoutes` yet" — **stale**; `app.go:198` does call it, so `GET /api/search` is live. |
 | Todo Huma operations | five live owner-scoped list/create/read/update/delete handlers; PocketBase `Any` routes inject the `RequestEvent` into request context before dispatching to the Huma adapter. |
 | `internal/app/app_password_throttle.go` | not unused — it backs `AuthenticateAppPassword`. Listed here only because it is a copy-identical file across repos. |

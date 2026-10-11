@@ -1902,14 +1902,16 @@
     },
     "authorization": {
       "func": "Authorize(event, permission)",
-      "currentBehaviour": "401 if unauthenticated; allow superuser; otherwise 403 'missing permission: <permission>'",
-      "status": "stub - no groups/permissions lookup implemented",
-      "unusedCollections": [
-        "groups",
-        "permissions",
+      "implementation": "wrapper calls shared go/authorization LoadPocketBase and Allows; loads direct user grants, group memberships, and group grants; explicit user denies override grants and superuser access",
+      "status": "implemented wrapper; no current route calls Authorize",
+      "rulesLoadedFrom": [
         "group_members",
         "group_permissions",
         "user_permissions"
+      ],
+      "collectionsNotLoaded": [
+        "groups",
+        "permissions"
       ]
     },
     "ownership": {
@@ -2263,8 +2265,8 @@
       "hooks/use-mobile.ts (only imported by the unused components/ui/sidebar.tsx)"
     ],
     "serverUnused": [
-      "internal/app/authorization.go - Authorize() is a stub and no route calls it",
-      "collections groups/permissions/group_members/group_permissions/user_permissions are never read",
+      "internal/app/authorization.go - Authorize() wraps shared rule loading/evaluation, but no route calls it",
+      "groups and permissions collections are not loaded; group_members, group_permissions, and user_permissions are read only by the currently uncalled Authorize wrapper",
       "audit_logs collection is declared in schema.go but written by no code",
       "stale comment in search.go:73 claiming registerSearchRoutes is not wired up (it is)",
       "stale comment in occurrences.go:51 claiming registerOccurrenceRoutes is not wired up (it is)"

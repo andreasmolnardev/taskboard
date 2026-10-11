@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pocketbase/pocketbase/tools/cron"
 	sharedconfig "github.com/andreasmolnardev/slopstack/go/config"
+	"github.com/pocketbase/pocketbase/tools/cron"
 )
 
 type RegistrationMode string

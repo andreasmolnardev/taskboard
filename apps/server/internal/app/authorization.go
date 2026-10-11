@@ -1,8 +1,8 @@
 package app
 
 import (
-	"github.com/pocketbase/pocketbase/core"
 	"github.com/andreasmolnardev/slopstack/go/authorization"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 // Authorize is the single backend enforcement point. Direct denies always win;

@@ -1,8 +1,8 @@
 package app
 
 import (
-	"github.com/pocketbase/pocketbase/core"
 	"github.com/andreasmolnardev/slopstack/go/auth"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 // RegistrationAllowed centralizes the registration policy for custom endpoints

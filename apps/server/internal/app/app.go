@@ -14,8 +14,11 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
+func Register(pb *pocketbase.PocketBase, config Config, api huma.API) error {
 	registerTodoAPI(api)
+	if err := registerAuditHooks(pb); err != nil {
+		return fmt.Errorf("register audit hooks: %w", err)
+	}
 	pb.RootCmd.PersistentFlags().StringVar(&config.HTTPAddress, "http", config.HTTPAddress, "HTTP address")
 	pb.OnBootstrap().BindFunc(func(e *core.BootstrapEvent) error {
 		if err := e.Next(); err != nil {
@@ -49,7 +52,9 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 		return applyBackupConfig(e.App, config)
 	})
 	protectUserAdminFlag(pb, config)
-	registerOwnershipHooks(pb)
+	if err := registerOwnershipHooks(pb); err != nil {
+		return fmt.Errorf("register ownership hooks: %w", err)
+	}
 	registerCalDAVChangeHooks(pb)
 	registerCardDAVChangeHooks(pb)
 	registerReminderScheduler(pb)
@@ -65,6 +70,7 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 		registerRoutes(e, config, api)
 		return e.Next()
 	})
+	return nil
 }
 
 func validatePreMigrationConfig(config Config) error {
@@ -189,17 +195,7 @@ func protectUserAdminFlag(pb *pocketbase.PocketBase, config Config) {
 }
 
 func registerRoutes(e *core.ServeEvent, config Config, api huma.API) {
-	e.Router.GET("/openapi.json", func(event *core.RequestEvent) error { return event.JSON(http.StatusOK, api.OpenAPI()) })
-	e.Router.GET("/openapi.yaml", func(event *core.RequestEvent) error {
-		data, err := api.OpenAPI().YAML()
-		if err != nil {
-			return err
-		}
-		return event.Blob(http.StatusOK, "application/yaml", data)
-	})
-	e.Router.GET("/docs", func(event *core.RequestEvent) error {
-		return event.HTML(http.StatusOK, "<!doctype html><html><body><redoc spec-url=\"/openapi.json\"></redoc><script src=\"https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js\"></script></body></html>")
-	})
+	httpapi.RegisterOpenAPIDocs(e, api)
 	registerAuthRoutes(e, config)
 	registerAppPasswordRoutes(e)
 	registerCalendarIORoutes(e)

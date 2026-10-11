@@ -20,7 +20,7 @@ RUN addgroup -S taskboard && adduser -S taskboard -G taskboard
 WORKDIR /app
 COPY --from=server-build /taskboard /app/taskboard
 COPY --from=web-build /src/apps/web/dist /app/public
-RUN chown -R taskboard:taskboard /app
+RUN mkdir -p /app/pb_data && chown -R taskboard:taskboard /app
 USER taskboard
 VOLUME ["/app/pb_data"]
 EXPOSE 8090

@@ -3,7 +3,7 @@ module github.com/andreasmolnardev/taskboard
 go 1.26.0
 
 require (
-	github.com/andreasmolnardev/slopstack v0.2.0
+	github.com/andreasmolnardev/slopstack v0.3.0
 	github.com/danielgtaylor/huma/v2 v2.38.0
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/pocketbase/dbx v1.12.0

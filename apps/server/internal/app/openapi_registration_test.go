@@ -15,7 +15,9 @@ func TestRegisterMakesTodoOperationAvailableBeforeServe(t *testing.T) {
 	pb := pocketbase.New()
 	api := humago.New(http.NewServeMux(), huma.DefaultConfig("Slopstack API", "0.1.0"))
 
-	Register(pb, Config{HTTPAddress: ":8090", PublicURL: "http://localhost:8090"}, api)
+	if err := Register(pb, Config{HTTPAddress: ":8090", PublicURL: "http://localhost:8090"}, api); err != nil {
+		t.Fatal(err)
+	}
 
 	document, err := json.Marshal(api.OpenAPI())
 	if err != nil {

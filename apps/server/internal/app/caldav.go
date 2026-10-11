@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andreasmolnardev/slopstack/go/ownership"
 	calendarengine "github.com/andreasmolnardev/taskboard/apps/server/internal/calendar"
 	ical "github.com/emersion/go-ical"
 	"github.com/pocketbase/dbx"
@@ -415,7 +416,7 @@ func calDAVPut(event *core.RequestEvent, user *core.Record) error {
 				return calDAVPutFailure{conflict: true, message: "component type does not match resource"}
 			}
 			existing, err = txApp.FindRecordById(collection, path.recordID)
-			if err != nil || existing.GetString("owner") != user.Id || resourceCalendarID(existing, collection) != path.calendarID {
+			if err != nil || !ownership.IsOwner(existing, "owner", user.Id) || resourceCalendarID(existing, collection) != path.calendarID {
 				return calDAVPutFailure{status: http.StatusNotFound, message: "calendar resource not found"}
 			}
 			if existing.GetString("uid") != uid {
@@ -481,6 +482,11 @@ func calDAVPut(event *core.RequestEvent, user *core.Record) error {
 		}
 		return err
 	}
+	action := "update"
+	if created {
+		action = "create"
+	}
+	logAuditMutation(event.Request.Context(), event.App, user.Id, action, collection, saved.Id, "caldav")
 	resource, err := makeCalDAVResource(saved, collection, user.Id, path.calendarID)
 	if err != nil {
 		return err
@@ -505,6 +511,7 @@ func calDAVDelete(event *core.RequestEvent, user *core.Record) error {
 	if status := checkCalDAVPreconditions(event.Request.Header, true, resource.etag); status != 0 {
 		return event.NoContent(status)
 	}
+	deletedIDs := make([]string, 0, 1)
 	err = event.App.RunInTransaction(func(txApp core.App) error {
 		if resource.kind == "events" && resource.record.GetString("recurrence_parent") == "" {
 			overrides, findErr := txApp.FindRecordsByFilter("events", "recurrence_parent = {:parent}", "id", 0, 0, dbx.Params{"parent": resource.record.Id})
@@ -515,16 +522,21 @@ func calDAVDelete(event *core.RequestEvent, user *core.Record) error {
 				if deleteErr := txApp.Delete(override); deleteErr != nil {
 					return deleteErr
 				}
+				deletedIDs = append(deletedIDs, override.Id)
 			}
 		}
 		record, findErr := txApp.FindRecordById(resource.kind, resource.record.Id)
 		if findErr != nil {
 			return findErr
 		}
+		deletedIDs = append(deletedIDs, record.Id)
 		return txApp.Delete(record)
 	})
 	if err != nil {
 		return err
+	}
+	for _, id := range deletedIDs {
+		logAuditMutation(event.Request.Context(), event.App, user.Id, "delete", resource.kind, id, "caldav")
 	}
 	return event.NoContent(http.StatusNoContent)
 }
@@ -818,7 +830,7 @@ func ownedCalendars(app core.App, userID string) ([]*core.Record, error) {
 
 func ownedCalendar(app core.App, userID, calendarID string) (*core.Record, error) {
 	calendar, err := app.FindRecordById("calendars", calendarID)
-	if err != nil || calendar.GetString("owner") != userID {
+	if err != nil || !ownership.IsOwner(calendar, "owner", userID) {
 		return nil, fmt.Errorf("calendar not found")
 	}
 	return calendar, nil
@@ -867,7 +879,7 @@ func findCalDAVResource(app core.App, userID string, path calDAVPath) (calDAVRes
 		return calDAVResource{}, fmt.Errorf("resource not found")
 	}
 	record, err := app.FindRecordById(path.itemKind, path.recordID)
-	if err != nil || record.GetString("owner") != userID || resourceCalendarID(record, path.itemKind) != path.calendarID {
+	if err != nil || !ownership.IsOwner(record, "owner", userID) || resourceCalendarID(record, path.itemKind) != path.calendarID {
 		return calDAVResource{}, fmt.Errorf("resource not found")
 	}
 	return makeCalDAVResource(record, path.itemKind, userID, path.calendarID)

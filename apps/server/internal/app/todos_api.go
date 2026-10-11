@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/andreasmolnardev/slopstack/go/httpapi"
+	"github.com/andreasmolnardev/slopstack/go/ownership"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
@@ -107,13 +109,9 @@ func registerTodoOpenAPI(api huma.API) {
 }
 
 func registerTodoHTTPRoutes(e *core.ServeEvent, api huma.API) {
-	bridge := func(event *core.RequestEvent) error {
-		event.Request = event.Request.WithContext(context.WithValue(event.Request.Context(), todoRequestEventContextKey{}, event))
-		api.Adapter().ServeHTTP(event.Response, event.Request)
-		return nil
-	}
-	e.Router.Any("/api/todos", bridge)
-	e.Router.Any("/api/todos/{id}", bridge)
+	httpapi.RegisterHumaRoutes(e, api, []string{"/api/todos", "/api/todos/{id}"}, func(request *http.Request, event *core.RequestEvent) *http.Request {
+		return request.WithContext(context.WithValue(request.Context(), todoRequestEventContextKey{}, event))
+	})
 }
 
 type todoRequestEventContextKey struct{}
@@ -172,6 +170,7 @@ func createTodo(ctx context.Context, input *todoCreateInput) (*todoBody, error) 
 	if err := event.App.Save(record); err != nil {
 		return nil, huma.Error400BadRequest("Todo could not be saved", err)
 	}
+	logRequestAudit(event, "create", "todos", record.Id, "todo-api")
 	return &todoBody{Body: toTodoRecord(record)}, nil
 }
 
@@ -215,6 +214,7 @@ func updateTodo(ctx context.Context, input *todoUpdateInput) (*todoBody, error) 
 	if err := event.App.Save(record); err != nil {
 		return nil, huma.Error400BadRequest("Todo could not be saved", err)
 	}
+	logRequestAudit(event, "update", "todos", record.Id, "todo-api")
 	return &todoBody{Body: toTodoRecord(record)}, nil
 }
 
@@ -230,12 +230,13 @@ func deleteTodo(ctx context.Context, input *todoPathInput) (*struct{}, error) {
 	if err := event.App.Delete(record); err != nil {
 		return nil, huma.Error500InternalServerError("Todo could not be deleted", err)
 	}
+	logRequestAudit(event, "delete", "todos", record.Id, "todo-api")
 	return &struct{}{}, nil
 }
 
 func findOwnedTodo(event *core.RequestEvent, id string) (*core.Record, error) {
 	record, err := event.App.FindRecordById("todos", id)
-	if err != nil || record.GetString("owner") != event.Auth.Id {
+	if err != nil || !ownership.IsOwner(record, "owner", event.Auth.Id) {
 		return nil, huma.Error404NotFound("Todo not found")
 	}
 	return record, nil

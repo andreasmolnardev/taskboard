@@ -34,7 +34,9 @@ func newHTTPIntegrationServer(t *testing.T) *httpIntegrationServer {
 		DefaultEncryptionEnv: "pb_test_env",
 	})
 	api := humago.New(http.NewServeMux(), huma.DefaultConfig("Taskboard test API", "test"))
-	Register(pb, Config{RegistrationMode: RegistrationApproval}, api)
+	if err := Register(pb, Config{RegistrationMode: RegistrationApproval}, api); err != nil {
+		t.Fatal(err)
+	}
 	if err := pb.Bootstrap(); err != nil {
 		t.Fatal(err)
 	}
@@ -246,6 +248,11 @@ func TestCalDAVHTTPIntegration(t *testing.T) {
 	if status != http.StatusCreated || createdETag == "" || headers.Get("Location") == "" {
 		t.Fatalf("CalDAV PUT create = %d, ETag %q, Location %q", status, createdETag, headers.Get("Location"))
 	}
+	createdResource, err := findCalDAVResource(server.app, owner.Id, parseCalDAVPath(resourcePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertAuditEvent(t, server.app, owner.Id, "create", "events", createdResource.record.Id, "caldav")
 	status, headers, body = integrationRequest(t, server, http.MethodGet, resourcePath, "", ownerAuth)
 	if status != http.StatusOK || headers.Get("ETag") != createdETag || !strings.Contains(body, "SUMMARY:Initial event") {
 		t.Fatalf("CalDAV GET = %d, ETag %q, body = %s", status, headers.Get("ETag"), body)
@@ -270,6 +277,7 @@ func TestCalDAVHTTPIntegration(t *testing.T) {
 	if status != http.StatusNoContent || updatedETag == "" || updatedETag == createdETag {
 		t.Fatalf("CalDAV PUT update = %d, old ETag %q, new ETag %q", status, createdETag, updatedETag)
 	}
+	assertAuditEvent(t, server.app, owner.Id, "update", "events", createdResource.record.Id, "caldav")
 	status, _, _ = integrationRequest(t, server, http.MethodPut, resourcePath, updatedICS, mergeHeaders(ownerAuth, http.Header{"Content-Type": []string{"text/calendar"}, "If-Match": []string{createdETag}}))
 	if status != http.StatusPreconditionFailed {
 		t.Fatalf("stale CalDAV PUT = %d, want %d", status, http.StatusPreconditionFailed)
@@ -297,6 +305,7 @@ func TestCalDAVHTTPIntegration(t *testing.T) {
 	if status != http.StatusNoContent {
 		t.Fatalf("CalDAV DELETE = %d, want %d", status, http.StatusNoContent)
 	}
+	assertAuditEvent(t, server.app, owner.Id, "delete", "events", createdResource.record.Id, "caldav")
 	status, _, body = integrationRequest(t, server, "REPORT", calendarPath+"/", syncRequestWithToken(updatedToken), withContentType(ownerAuth))
 	if status != http.StatusMultiStatus || !strings.Contains(body, resourcePath) || !strings.Contains(body, "404 Not Found") {
 		t.Fatalf("CalDAV delete sync = %d, body = %s", status, body)
@@ -352,6 +361,11 @@ func TestCardDAVHTTPIntegration(t *testing.T) {
 	if status != http.StatusCreated || createdETag == "" || headers.Get("Location") == "" {
 		t.Fatalf("CardDAV PUT create = %d, ETag %q, Location %q", status, createdETag, headers.Get("Location"))
 	}
+	createdContact, err := findCardDAVContact(server.app, owner.Id, book.Id, "jane-doe.vcf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertAuditEvent(t, server.app, owner.Id, "create", "contacts", createdContact.Id, "carddav")
 	status, headers, body = integrationRequest(t, server, http.MethodGet, contactPath, "", ownerAuth)
 	if status != http.StatusOK || headers.Get("ETag") != createdETag || !strings.Contains(body, "FN:Jane Doe") {
 		t.Fatalf("CardDAV GET = %d, ETag %q, body = %s", status, headers.Get("ETag"), body)
@@ -380,6 +394,7 @@ func TestCardDAVHTTPIntegration(t *testing.T) {
 	if status != http.StatusNoContent || updatedETag == "" || updatedETag == createdETag {
 		t.Fatalf("CardDAV PUT update = %d, old ETag %q, new ETag %q", status, createdETag, updatedETag)
 	}
+	assertAuditEvent(t, server.app, owner.Id, "update", "contacts", createdContact.Id, "carddav")
 	status, _, body = integrationRequest(t, server, "PROPFIND", "/carddav/", "", ownerAuth)
 	afterCTag := ctag(body)
 	if status != http.StatusMultiStatus || afterCTag == "" || afterCTag == beforeCTag || !strings.Contains(body, updatedETag) {
@@ -390,6 +405,7 @@ func TestCardDAVHTTPIntegration(t *testing.T) {
 	if status != http.StatusNoContent {
 		t.Fatalf("CardDAV DELETE = %d, want %d", status, http.StatusNoContent)
 	}
+	assertAuditEvent(t, server.app, owner.Id, "delete", "contacts", createdContact.Id, "carddav")
 	status, _, body = integrationRequest(t, server, http.MethodGet, contactPath, "", ownerAuth)
 	if status != http.StatusNotFound {
 		t.Fatalf("deleted CardDAV GET = %d, want %d", status, http.StatusNotFound)
@@ -435,6 +451,77 @@ func TestOccurrencesHTTPIntegration(t *testing.T) {
 	status, _, _ = integrationRequest(t, server, http.MethodGet, path, "", nil)
 	if status != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated occurrences status = %d", status)
+	}
+}
+
+func assertAuditEvent(t *testing.T, app core.App, actorID, action, resource, resourceID, source string) {
+	t.Helper()
+	records, err := app.FindRecordsByFilter("audit_logs", "actor = {:actor} && action = {:action}", "", 0, 0, dbx.Params{"actor": actorID, "action": action})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range records {
+		var metadata map[string]any
+		encoded, err := json.Marshal(record.Get("metadata"))
+		if err != nil {
+			t.Fatalf("encode audit metadata: %v", err)
+		}
+		if err := json.Unmarshal(encoded, &metadata); err != nil {
+			t.Fatalf("decode audit metadata: %v", err)
+		}
+		if metadata["resource"] == resource && metadata["resource_id"] == resourceID && (source == "" || metadata["source"] == source) {
+			return
+		}
+	}
+	t.Fatalf("no audit event for actor=%q action=%q resource=%q id=%q source=%q (found %d rows)", actorID, action, resource, resourceID, source, len(records))
+}
+
+func TestCustomMutationAuditUsesIdentifiersAndSafeMetadata(t *testing.T) {
+	server := newHTTPIntegrationServer(t)
+	user := integrationUser(t, server.app, "audit-http@example.com")
+	token := authToken(t, server, user.GetString("email"))
+	headers := withContentType(bearerHeaders(token))
+
+	status, _, body := integrationRequest(t, server, http.MethodPost, "/api/todos", `{"title":"private task title"}`, headers)
+	if status != http.StatusCreated {
+		t.Fatalf("todo create = %d, body = %s", status, body)
+	}
+	var todo struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(body), &todo); err != nil {
+		t.Fatal(err)
+	}
+	if todo.ID == "" {
+		t.Fatal("todo create returned no ID")
+	}
+	assertAuditEvent(t, server.app, user.Id, "create", "todos", todo.ID, "todo-api")
+
+	status, _, body = integrationRequest(t, server, http.MethodPost, "/api/auth/app-passwords", `{"name":"audit test"}`, headers)
+	if status != http.StatusCreated {
+		t.Fatalf("app password create = %d, body = %s", status, body)
+	}
+	var password struct {
+		ID     string `json:"id"`
+		Secret string `json:"secret"`
+	}
+	if err := json.Unmarshal([]byte(body), &password); err != nil {
+		t.Fatal(err)
+	}
+	assertAuditEvent(t, server.app, user.Id, "create", appPasswordCollection, password.ID, "app-password-api")
+	logs, err := server.app.FindRecordsByFilter("audit_logs", "actor = {:actor}", "", 0, 0, dbx.Params{"actor": user.Id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range logs {
+		encoded, err := json.Marshal(record.Get("metadata"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		metadata := string(encoded)
+		if strings.Contains(metadata, "private task title") || strings.Contains(metadata, password.Secret) || strings.Contains(metadata, "secret_hash") {
+			t.Fatalf("audit metadata contains mutation payload or credential field: %s", metadata)
+		}
 	}
 }
 
@@ -485,6 +572,7 @@ func TestPocketBaseHTTPAuthorizationRules(t *testing.T) {
 	if createdCalendar.ID == "" || createdCalendar.Owner != other.Id {
 		t.Fatalf("created calendar = %#v", createdCalendar)
 	}
+	assertAuditEvent(t, server.app, other.Id, "create", "calendars", createdCalendar.ID, "")
 
 	spoofedCalendar := `{"owner":"` + owner.Id + `","name":"Spoofed owner"}`
 	status, _, body = integrationRequest(t, server, http.MethodPost, "/api/collections/calendars/records", spoofedCalendar, withContentType(bearerHeaders(otherToken)))

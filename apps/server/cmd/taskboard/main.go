@@ -26,7 +26,10 @@ func main() {
 	}
 
 	api := newOpenAPI(config)
-	app.Register(pb, config, api)
+	if err := app.Register(pb, config, api); err != nil {
+		slog.Error("register Taskboard application", "error", err)
+		os.Exit(1)
+	}
 	registerExportCommand(pb, api)
 	pb.RootCmd.AddCommand(app.NewBackupCommand(pb))
 

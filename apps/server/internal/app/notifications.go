@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/andreasmolnardev/slopstack/go/ownership"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/types"
@@ -148,7 +149,7 @@ func readNotificationRoute(event *core.RequestEvent) error {
 		return err
 	}
 	record, err := event.App.FindRecordById(notificationCollection, event.Request.PathValue("id"))
-	if err != nil || record.GetString("owner") != user.Id {
+	if err != nil || !ownership.IsOwner(record, "owner", user.Id) {
 		return event.NotFoundError("notification not found", nil)
 	}
 	if !record.GetBool("read") {
@@ -171,7 +172,7 @@ func notificationForUser(event *core.RequestEvent) (*core.Record, error) {
 		return nil, err
 	}
 	record, err := event.App.FindRecordById(notificationCollection, event.Request.PathValue("id"))
-	if err != nil || record.GetString("owner") != user.Id {
+	if err != nil || !ownership.IsOwner(record, "owner", user.Id) {
 		return nil, event.NotFoundError("notification not found", nil)
 	}
 	return record, nil
@@ -231,7 +232,7 @@ func createReminderRoute(event *core.RequestEvent) error {
 		return event.BadRequestError("invalid reminder target", err)
 	}
 	target, err := event.App.FindRecordById(collectionName, input.TargetID)
-	if err != nil || target.GetString("owner") != user.Id {
+	if err != nil || !ownership.IsOwner(target, "owner", user.Id) {
 		return event.NotFoundError("reminder target not found", nil)
 	}
 	at, err := time.Parse(time.RFC3339, input.At)

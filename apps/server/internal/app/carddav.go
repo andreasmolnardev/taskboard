@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/andreasmolnardev/slopstack/go/ownership"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -473,13 +474,17 @@ func cardDAVPut(event *core.RequestEvent, user *core.Record, path cardDAVPath) e
 	if err != nil {
 		return err
 	}
+	action := "update"
+	if created {
+		action = "create"
+	}
+	logAuditMutation(event.Request.Context(), event.App, user.Id, action, "contacts", saved.Id, "carddav")
 	etag := contactETag(string(normalizedData))
 	event.Response.Header().Set("ETag", etag)
 	event.Response.Header().Set("Location", cardDAVResourceHref(book.Id, path.resourceName))
 	if created {
 		return event.NoContent(http.StatusCreated)
 	}
-	_ = saved
 	return event.NoContent(http.StatusNoContent)
 }
 
@@ -497,6 +502,7 @@ func cardDAVDelete(event *core.RequestEvent, user *core.Record, path cardDAVPath
 	if err := event.App.Delete(contact); err != nil {
 		return err
 	}
+	logAuditMutation(event.Request.Context(), event.App, user.Id, "delete", "contacts", contact.Id, "carddav")
 	return event.NoContent(http.StatusNoContent)
 }
 
@@ -681,7 +687,7 @@ func ownedBookErr(app core.App, owner, id string) error {
 
 func ownedAddressBook(app core.App, owner, id string) (*core.Record, error) {
 	book, err := app.FindRecordById("address_books", id)
-	if err != nil || book.GetString("owner") != owner {
+	if err != nil || !ownership.IsOwner(book, "owner", owner) {
 		return nil, fmt.Errorf("address book not found")
 	}
 	return book, nil
@@ -708,7 +714,7 @@ func findCardDAVContact(app core.App, owner, bookID, href string) (*core.Record,
 	}
 	legacyID := strings.TrimSuffix(href, ".vcf")
 	contact, err := app.FindRecordById("contacts", legacyID)
-	if err != nil || contact.GetString("owner") != owner || contact.GetString("address_book") != bookID || contact.GetString("dav_href") != "" {
+	if err != nil || !ownership.IsOwner(contact, "owner", owner) || contact.GetString("address_book") != bookID || contact.GetString("dav_href") != "" {
 		return nil, fmt.Errorf("contact not found")
 	}
 	return contact, nil

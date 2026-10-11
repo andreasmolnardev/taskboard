@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { parseConfigYaml, validateProjectConfig } from './project-config.js';
-import { buildDeployCommand } from './deploy.js';
+import { assertBuildxVersion, buildDeployCommand, buildExportCommand } from './deploy.js';
 import { planRelease } from './release.js';
 
 const validConfig = `schemaVersion: 1
@@ -53,6 +53,17 @@ test('deploy command builds with the published runtime module and configured pla
     'buildx', 'build', '--platform', 'linux/amd64,linux/arm64',
     '--tag', 'ghcr.io/andreasmolnardev/taskboard:latest', '--push', '.',
   ]);
+});
+
+test('deploy can export a multi-platform OCI archive and checks the configured Buildx version', () => {
+  const config = validateProjectConfig(parseConfigYaml(validConfig));
+  assert.deepEqual(buildExportCommand(config, '/tmp/taskboard image.tar').args, [
+    'buildx', 'build', '--platform', 'linux/amd64,linux/arm64',
+    '--tag', 'ghcr.io/andreasmolnardev/taskboard:latest',
+    '--output', 'type=oci,dest=/tmp/taskboard image.tar', '.',
+  ]);
+  assert.doesNotThrow(() => assertBuildxVersion('github.com/docker/buildx v0.30.0 abcdef', '0.30.0'));
+  assert.throws(() => assertBuildxVersion('github.com/docker/buildx v0.29.0 abcdef', '0.30.0'), /0\.30\.0 is required/);
 });
 
 test('release planning changes only release version and image tag without writing', async (t) => {

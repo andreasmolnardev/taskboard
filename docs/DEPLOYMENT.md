@@ -37,17 +37,45 @@ This is also a dry run. `pnpm release --version 1.2.3 --apply` updates only
 does not publish an image or release. Review and commit the metadata update,
 then deploy separately.
 
+Export a multi-platform OCI archive for offline transfer or inspection with:
+
+```sh
+pnpm deploy --export ./taskboard-image.tar
+```
+
+The command checks that the installed Docker Buildx version matches
+`tools.dockerBuildx` in `slopstack.yaml` before building. Keep enough disk space
+for the full archive.
+
 Compose and the image both check PocketBase's `/api/health` endpoint. Compose
 allows 30 seconds for the process to stop so PocketBase can close cleanly.
 
 ## Required production settings
 
 - Set `TASKBOARD_PUBLIC_URL` to the public origin.
-- Set `TASKBOARD_SECURE_COOKIES=true` behind HTTPS.
 - Set a durable `TASKBOARD_STORAGE_PATH`.
 - Existing deployments may continue to set `SLOPSTACK_*`; matching `TASKBOARD_*` variables take precedence.
 - Compose retains the existing `slopstack-data` volume and `/app/pb_data` mount so existing data stays at the same location.
 - Keep PocketBase data outside ephemeral container storage.
+
+### Reverse proxy
+
+Terminate TLS at a trusted reverse proxy and forward the original host and
+protocol to Taskboard. For Caddy, a minimal site is:
+
+```caddyfile
+tasks.example.com {
+    reverse_proxy 127.0.0.1:8090
+}
+```
+
+Set `TASKBOARD_PUBLIC_URL=https://tasks.example.com`. Keep PocketBase bound to a
+private interface or container network; do not expose port 8090 directly to the
+internet. The proxy must support WebSocket upgrades and pass `Host`,
+`X-Forwarded-For`, and `X-Forwarded-Proto` headers, overwriting forwarded
+values supplied by clients. With the included Compose file and a host-level
+Caddy instance, bind the published port to localhost
+(`127.0.0.1:8090:8090`).
 
 ## Backups
 
@@ -116,6 +144,12 @@ Before release, run the disposable fixture check on each supported platform.
 Startup validates backup cron and retention settings before running application
 migrations. Take and verify an encrypted backup before deploying a new version;
 the startup check cannot protect against an application migration defect.
+
+For an application upgrade, first stop any older Taskboard instances that share
+the data volume, create and verify an encrypted backup, then start the new image
+with the same persistent volume. Keep the old image available until health
+checks and a smoke test pass. Never run two versions against the same
+PocketBase data directory during a migration.
 
 ## Frontend
 

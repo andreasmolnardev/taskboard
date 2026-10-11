@@ -293,10 +293,8 @@ migration `20260824000000_add_user_is_admin`, never touched by `EnsureCollection
 | --- | --- | --- |
 | `TASKBOARD_HTTP_ADDRESS` | `0.0.0.0:8090` | PB `--http` flag default |
 | `TASKBOARD_PUBLIC_URL` | `http://localhost:8090` | OpenAPI server URL + `settings.Meta.AppURL` |
-| `TASKBOARD_SECURE_COOKIES` | `false` | `Config.SecureCookies` (**declared, never read**) |
 | `TASKBOARD_REGISTRATION_ENABLED` | `true` | `false` ⇒ `RegistrationDisabled` |
 | `TASKBOARD_REGISTRATION_MODE` | `approval` | `disabled` \| `approval` \| `otp` |
-| `TASKBOARD_LOG_LEVEL` | `info` | `Config.LogLevel` (**declared, never read**) |
 | `TASKBOARD_STORAGE_PATH` | `pb_data` | PocketBase data dir |
 | `TASKBOARD_DEVELOPMENT` | `false` | `DefaultDev`; enables the guest route and Redoc |
 | `TASKBOARD_BACKUP_ENABLED` | `false` | master switch for PB cron + S3 + the app's own cron |

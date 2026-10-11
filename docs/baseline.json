@@ -2028,14 +2028,6 @@
         "default": "http://localhost:8090",
         "consumed": true
       },
-      "SLOPSTACK_SECURE_COOKIES": {
-        "default": "false",
-        "consumed": false
-      },
-      "SLOPSTACK_LOG_LEVEL": {
-        "default": "info",
-        "consumed": false
-      },
       "SLOPSTACK_REGISTRATION_ENABLED": {
         "default": "true",
         "consumed": true
@@ -2274,7 +2266,6 @@
       "internal/app/authorization.go - Authorize() is a stub and no route calls it",
       "collections groups/permissions/group_members/group_permissions/user_permissions are never read",
       "audit_logs collection is declared in schema.go but written by no code",
-      "Config.SecureCookies and Config.LogLevel are parsed but never read",
       "stale comment in search.go:73 claiming registerSearchRoutes is not wired up (it is)",
       "stale comment in occurrences.go:51 claiming registerOccurrenceRoutes is not wired up (it is)"
     ]

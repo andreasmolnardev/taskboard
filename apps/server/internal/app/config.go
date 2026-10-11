@@ -19,9 +19,7 @@ const (
 type Config struct {
 	HTTPAddress       string
 	PublicURL         string
-	SecureCookies     bool
 	RegistrationMode  RegistrationMode
-	LogLevel          string
 	StoragePath       string
 	Development       bool
 	BackupEnabled     bool
@@ -45,9 +43,7 @@ func LoadConfig() Config {
 	return Config{
 		HTTPAddress:       env("TASKBOARD_HTTP_ADDRESS", "0.0.0.0:8090"),
 		PublicURL:         env("TASKBOARD_PUBLIC_URL", "http://localhost:8090"),
-		SecureCookies:     envBool("TASKBOARD_SECURE_COOKIES", false),
 		RegistrationMode:  registrationMode(),
-		LogLevel:          env("TASKBOARD_LOG_LEVEL", "info"),
 		StoragePath:       env("TASKBOARD_STORAGE_PATH", "pb_data"),
 		Development:       envBool("TASKBOARD_DEVELOPMENT", false),
 		BackupEnabled:     envBool("TASKBOARD_BACKUP_ENABLED", false),

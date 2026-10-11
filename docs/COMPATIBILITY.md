@@ -11,10 +11,15 @@ checked against the current source tree.
 - The server exposes the shared backup command tree as `taskboard backup`.
   Supported subcommands are `create`, `json`, `key-init`, `key-import`,
   `list`, and `restore`.
+- Taskboard configures shared backup commands to keep `create` encrypted by
+  default, imports recovery keys from stdin, and preserves the Taskboard and
+  legacy Slopstack restore-restart guards. The JSON export format and scheduled
+  backup/retention policy remain Taskboard-owned.
 - Runtime configuration uses `TASKBOARD_*`. For matching settings, the shared
   config lookup still accepts the old `SLOPSTACK_*` name; `TASKBOARD_*` wins
-  when both are set. The restore re-exec guard is
-  `TASKBOARD_BACKUP_RESTORE_RESTARTED`.
+  when both are set. Restore re-exec checks
+  `TASKBOARD_BACKUP_RESTORE_RESTARTED` and falls back to
+  `SLOPSTACK_BACKUP_RESTORE_RESTARTED`.
 - Taskboard serves live Huma Todo CRUD operations through the PocketBase router:
   `GET` and `POST /api/todos`, plus `GET`, `PATCH`, and `DELETE
   /api/todos/{id}`. Huma handlers use the authenticated PocketBase request

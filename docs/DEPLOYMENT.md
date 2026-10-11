@@ -100,8 +100,8 @@ creates a new PocketBase database there, initializes a fixture-only recovery
 key, writes an encrypted archive, and restores it. The script disables S3 for
 its subprocesses and removes only its own temporary directory on exit. It does
 not mount the Compose volume or contact the configured backup store. Use it
-after changes to backup encryption or module identity. CI can run it after its
-Slopstack module checkout is configured.
+after changes to backup encryption or module identity. CI runs it using the
+published Slopstack module version pinned in `go.mod`.
 
 The legacy smoke-test path delegates to the same disposable fixture check:
 

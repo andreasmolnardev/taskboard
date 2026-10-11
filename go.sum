@@ -1,5 +1,5 @@
-github.com/andreasmolnardev/slopstack v0.1.0 h1:tu77O11EeZBxSeiMKh1/Wv6c63jQnG8bxaI0Zh+lUzs=
-github.com/andreasmolnardev/slopstack v0.1.0/go.mod h1:0PuNOKCAPS+JOte5HHik8NzixiosM6CfFu8bhR3x9cE=
+github.com/andreasmolnardev/slopstack v0.2.0 h1:mEJwr/mV9XPXzGTAEq+LDTNO8DoXpUh5aF53eAqQ430=
+github.com/andreasmolnardev/slopstack v0.2.0/go.mod h1:0PuNOKCAPS+JOte5HHik8NzixiosM6CfFu8bhR3x9cE=
 github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496/go.mod h1:oGkLhpf+kjZl6xBf758TQhh5XrAeiJv/7FRz/2spLIg=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 h1:DklsrG3dyBCFEj5IhUbnKptjxatkF07cF2ak3yi77so=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2/go.mod h1:WaHUgvxTVq04UNunO+XhnAqY/wQc+bxr74GqbsZ/Jqw=

@@ -21,7 +21,7 @@ func registerEncryptedBackupScheduler(pb *pocketbase.PocketBase, config Config) 
 			return
 		}
 		stamp := time.Now().UTC().Format("20060102_150405_000000000")
-		name, err := createEncryptedArchive(ctx, pb, key, "scheduled_"+stamp)
+		name, err := createEncryptedArchive(ctx, pb, "scheduled_"+stamp)
 		if err != nil {
 			pb.Logger().Error("create scheduled backup", "error", err)
 		} else {

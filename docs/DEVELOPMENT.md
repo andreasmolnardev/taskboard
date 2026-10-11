@@ -15,13 +15,23 @@ The Go module and web workspace package use Taskboard identities. The server
 entrypoint is `apps/server/cmd/taskboard`; Go builds use module
 `github.com/andreasmolnardev/taskboard`.
 
-Taskboard's backup archive and JSON formats remain app-owned. The shared
-Slopstack dependency supplies auth, configuration, authorization, HTTP, and
-backup primitives. The local `go.mod` replace points to
-`../slopstack/slopstack` for coordinated development. Hosted CI and release
-workflows do not provision that sibling checkout. Before standalone hosted
-builds, pin a released Slopstack module version and remove the local replace. No
-released version is available in this coordinated change.
+Taskboard uses Slopstack's shared backup command, encrypted archive creation,
+PocketBase store adapter, and restore-archive cleanup. Taskboard configures that
+command to keep encrypted-only `backup create`, stdin key import, its
+`TASKBOARD_*` and legacy restore guards, and its existing `slopstack_restore_`
+temporary archive prefix. The JSON export format, scheduler, and retention
+policy remain app-owned.
+
+The shared API changes are being validated against the sibling Slopstack
+checkout with a temporary local `replace` in `go.mod`. After runtime `v0.2.0`
+is released, remove the replace and pin that release before committing for
+hosted CI:
+
+```sh
+go mod edit -dropreplace=github.com/andreasmolnardev/slopstack
+go get github.com/andreasmolnardev/slopstack@v0.2.0
+go mod tidy
+```
 
 Vite serves the web app on `5173`. Go and PocketBase serve the API on `8090`.
 

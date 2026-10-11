@@ -35,6 +35,8 @@ jobs:
         working-directory: apps/server
       - run: go test ./...
         working-directory: apps/server
+      - name: Verify disposable backup restore and historical-schema upgrade
+        run: pnpm compatibility:fixture
       - name: gofmt
         run: |
           unformatted="$(gofmt -l apps/server)"
@@ -51,3 +53,7 @@ jobs:
         run: python3 scripts/check-baseline.py
       - name: Verify Taskboard deployment metadata
         run: node scripts/check-taskboard-config.mjs
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build both supported image platforms
+        run: docker buildx build --platform linux/amd64,linux/arm64 --output type=oci,dest=/tmp/taskboard-image.tar .

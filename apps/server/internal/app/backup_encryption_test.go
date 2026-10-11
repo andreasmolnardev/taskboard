@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pocketbase/pocketbase/tests"
@@ -18,6 +19,9 @@ func TestEncryptedBackupRoundTrip(t *testing.T) {
 	ciphertext, err := encryptBackup(key, plain)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if string(ciphertext[:5]) != "SLBK1" {
+		t.Fatalf("encrypted backup magic = %q, want SLBK1", ciphertext[:5])
 	}
 	if bytes.Contains(ciphertext, plain) {
 		t.Fatal("ciphertext contains plaintext")
@@ -31,6 +35,16 @@ func TestEncryptedBackupRoundTrip(t *testing.T) {
 	}
 	if _, err := decryptBackup(bytes.Repeat([]byte{8}, 32), ciphertext); err == nil {
 		t.Fatal("expected wrong key to fail")
+	}
+}
+
+func TestBackupKeyErrorsKeepTaskboardGuidance(t *testing.T) {
+	_, err := loadBackupKey(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "taskboard backup key-init") {
+		t.Fatalf("missing-key error = %v, want Taskboard key-init guidance", err)
+	}
+	if _, err := decryptBackup(bytes.Repeat([]byte{7}, 32), []byte("not an encrypted backup")); err == nil || err.Error() != "unsupported or invalid encrypted backup" {
+		t.Fatalf("invalid backup error = %v, want existing Taskboard wording", err)
 	}
 }
 

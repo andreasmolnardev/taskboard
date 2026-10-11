@@ -1,8 +1,8 @@
 # Taskboard — Architecture
 
-Baseline audit, Phase 0. Everything here was verified against the working tree at
-commit `75b827a` ("wip: checkpoint pre-migration working tree"). No behaviour is
-described that is not present in code.
+Baseline audit for Phase 0, updated with the Phase 1 identity changes. The
+compatibility snapshot in `docs/COMPATIBILITY.md` remains the historical Phase 0
+contract; this file describes the current checkout.
 
 ---
 
@@ -12,7 +12,7 @@ described that is not present in code.
 taskboard/
 ├── apps/
 │   ├── server/                     Go / PocketBase backend
-│   │   ├── cmd/slopstack/main.go   the only binary entrypoint
+│   │   ├── cmd/taskboard/main.go   the only binary entrypoint
 │   │   ├── internal/app/           the application package (~44 .go files)
 │   │   ├── internal/calendar/      iCalendar recurrence expansion
 │   │   ├── internal/reminders/     reminder domain model + scheduler
@@ -34,33 +34,31 @@ taskboard/
 └── Dockerfile, docker-compose.yml, Makefile, go.mod, package.json
 ```
 
-### 1.1 Copy-paste identity problem (must be fixed in Phase 1)
+### 1.1 Independent application identity
 
-Taskboard was copied from the Slopstack template and still carries the template's
-identity verbatim:
+Taskboard keeps its application identity separate from the Slopstack template:
 
-| Surface | Current value | Should be |
-| --- | --- | --- |
-| `go.mod` module | `github.com/slopstack/slopstack` | `github.com/<org>/taskboard` |
-| `apps/web/package.json` name | `@slopstack/web` | `@taskboard/web` |
-| root `package.json` name | `slopstack` | `taskboard` |
-| root `package.json` packageManager | `pnpm@11.8.0` | — |
-| `pnpm dev:server` | `go run github.com/air-verse/air@latest` | — |
-| binary name | `apps/server/cmd/slopstack` | — |
-| CLI root command | `pb.RootCmd.Use = "slopstack"` | — |
-| all env vars | `SLOPSTACK_*` | `TASKBOARD_*` |
-| Docker compose service / image | `slopstack`, `slopstack-data` | — |
+| Surface | Current value |
+| --- | --- |
+| `go.mod` module | `github.com/andreasmolnardev/taskboard` |
+| `apps/web/package.json` name | `@taskboard/web` |
+| root `package.json` name | `taskboard` |
+| binary path / CLI | `apps/server/cmd/taskboard`, `taskboard` |
+| environment prefix | `TASKBOARD_*` (legacy `SLOPSTACK_*` fallback) |
+| Docker Compose service / image | `taskboard`, image `taskboard` |
+| Docker Compose data volume | Existing `slopstack-data` name retained for deployed data |
 
-The `SLOPSTACK_*` env prefix is load-bearing for deployed instances; changing it is
-a breaking configuration change and is tracked in `docs/AGENT-NOTES.md`.
-`pb.RootCmd.Use = "slopstack"` also leaks into CLI help text and, because
-`restore` re-executes the process, into the restart command line.
+The module path follows the configured `origin` remote. `SLOPSTACK_*` remains a
+deprecated fallback for deployed instances; `TASKBOARD_*` takes precedence when
+both are set. The PocketBase data path and Compose volume name are unchanged.
+`pb.RootCmd.Use = "taskboard"` also appears in CLI help text and the restart
+command line used by backup restore.
 
 ---
 
 ## 2. apps/server
 
-### 2.1 Entrypoint — `cmd/slopstack/main.go` (~60 lines)
+### 2.1 Entrypoint — `cmd/taskboard/main.go` (~60 lines)
 
 1. `app.LoadConfig()` reads every setting from the environment (see §5).
 2. `pocketbase.NewWithConfig(...)` with `DefaultDataDir: config.StoragePath`
@@ -69,7 +67,7 @@ a breaking configuration change and is tracked in `docs/AGENT-NOTES.md`.
    `http.NewServeMux` / `humago` adapter. The bearer security scheme is named
    `pocketbaseAuth`.
 4. `app.Register(pb, config, api)` — see §2.3.
-5. `registerExportCommand` adds `slopstack openapi export` (writes
+5. `registerExportCommand` adds `taskboard openapi export` (writes
    `openapi/openapi.json`).
 6. `pb.RootCmd.AddCommand(app.NewBackupCommand(pb).Command())` — see §2.6.
 
@@ -230,7 +228,7 @@ Server-side inherited-but-unused:
 | --- | --- |
 | `internal/app/authorization.go` | `Authorize()` exists and is a stub: it allows superusers and **forbids everyone else**; no group or `permissions`/`user_permissions` lookup is implemented. `groups`, `permissions`, `group_members`, `group_permissions`, `user_permissions` collections exist with **empty API rules** (admin-only via PocketBase superuser) but are never read by any route. |
 | `search.go:73` comment | says `registerSearchRoutes` "is intentionally not wired into `registerRoutes` yet" — **stale**; `app.go:198` does call it, so `GET /api/search` is live. |
-| `registerTodoRoutes` | returns a hard-coded empty array; the Huma op is a stub. Placeholder endpoint, not inherited, but it is dead surface. |
+| Todo Huma operations | five live owner-scoped list/create/read/update/delete handlers; PocketBase `Any` routes inject the `RequestEvent` into request context before dispatching to the Huma adapter. |
 | `internal/app/app_password_throttle.go` | not unused — it backs `AuthenticateAppPassword`. Listed here only because it is a copy-identical file across repos. |
 
 ---
@@ -293,20 +291,20 @@ migration `20260824000000_add_user_is_admin`, never touched by `EnsureCollection
 
 | Env var | Default | Maps to |
 | --- | --- | --- |
-| `SLOPSTACK_HTTP_ADDRESS` | `0.0.0.0:8090` | PB `--http` flag default |
-| `SLOPSTACK_PUBLIC_URL` | `http://localhost:8090` | OpenAPI server URL + `settings.Meta.AppURL` |
-| `SLOPSTACK_SECURE_COOKIES` | `false` | `Config.SecureCookies` (**declared, never read**) |
-| `SLOPSTACK_REGISTRATION_ENABLED` | `true` | `false` ⇒ `RegistrationDisabled` |
-| `SLOPSTACK_REGISTRATION_MODE` | `approval` | `disabled` \| `approval` \| `otp` |
-| `SLOPSTACK_LOG_LEVEL` | `info` | `Config.LogLevel` (**declared, never read**) |
-| `SLOPSTACK_STORAGE_PATH` | `pb_data` | PocketBase data dir |
-| `SLOPSTACK_DEVELOPMENT` | `false` | `DefaultDev`; enables the guest route and Redoc |
-| `SLOPSTACK_BACKUP_ENABLED` | `false` | master switch for PB cron + S3 + the app's own cron |
-| `SLOPSTACK_BACKUP_JSON_ENABLED` | `false` | also emit encrypted JSON export on schedule |
-| `SLOPSTACK_BACKUP_CRON` | `0 3 * * *` | app-level scheduler cron |
-| `SLOPSTACK_BACKUP_MAX_KEEP` | `14` | retention for `.zip.enc` and `.json.enc` |
-| `SLOPSTACK_BACKUP_S3_{ENABLED,BUCKET,REGION,ENDPOINT,ACCESS_KEY,SECRET,FORCE_PATH_STYLE}` | off/empty | PocketBase S3 backup target |
-| `SLOPSTACK_BACKUP_RESTORE_RESTARTED` | — | internal, guards the restore re-exec loop |
+| `TASKBOARD_HTTP_ADDRESS` | `0.0.0.0:8090` | PB `--http` flag default |
+| `TASKBOARD_PUBLIC_URL` | `http://localhost:8090` | OpenAPI server URL + `settings.Meta.AppURL` |
+| `TASKBOARD_SECURE_COOKIES` | `false` | `Config.SecureCookies` (**declared, never read**) |
+| `TASKBOARD_REGISTRATION_ENABLED` | `true` | `false` ⇒ `RegistrationDisabled` |
+| `TASKBOARD_REGISTRATION_MODE` | `approval` | `disabled` \| `approval` \| `otp` |
+| `TASKBOARD_LOG_LEVEL` | `info` | `Config.LogLevel` (**declared, never read**) |
+| `TASKBOARD_STORAGE_PATH` | `pb_data` | PocketBase data dir |
+| `TASKBOARD_DEVELOPMENT` | `false` | `DefaultDev`; enables the guest route and Redoc |
+| `TASKBOARD_BACKUP_ENABLED` | `false` | master switch for PB cron + S3 + the app's own cron |
+| `TASKBOARD_BACKUP_JSON_ENABLED` | `false` | also emit encrypted JSON export on schedule |
+| `TASKBOARD_BACKUP_CRON` | `0 3 * * *` | app-level scheduler cron |
+| `TASKBOARD_BACKUP_MAX_KEEP` | `14` | retention for `.zip.enc` and `.json.enc` |
+| `TASKBOARD_BACKUP_S3_{ENABLED,BUCKET,REGION,ENDPOINT,ACCESS_KEY,SECRET,FORCE_PATH_STYLE}` | off/empty | PocketBase S3 backup target |
+| `TASKBOARD_BACKUP_RESTORE_RESTARTED` | — | internal, guards the restore re-exec loop |
 
 `applyBackupConfig` deliberately **zeroes** `settings.Backups.Cron` — PocketBase's
 own cron backups are disabled and replaced by `registerEncryptedBackupScheduler`,
@@ -320,14 +318,14 @@ which produces the encrypted archives instead.
 | --- | --- | --- |
 | `apps/server/pb_data/` | the live dev database (`data.db`, `auxiliary.db`, WALs, `.notify/`) | yes |
 | `pb_data/` (repo root) | **stray** second database — `data.db` 372 KB + `auxiliary.db`, last written 2026-09-19 | yes |
-| `apps/server/tmp/` | `air` build output + `./tmp/slopstack` binary | yes |
+| `apps/server/tmp/` | `air` build output + `./tmp/taskboard` binary | yes |
 | `<StoragePath>/.backup-encryption-key` | 32-byte base64url AES key, mode `0600` | yes |
 | `<StoragePath>/backups/` | PocketBase backups filesystem: `*.zip`, `*.zip.enc`, `*.json.enc` | yes |
 | `apps/server/pb_data/*-wal`, `*-shm` | uncommitted SQLite WAL (1.2 MB WAL present) | yes |
 
 The root `pb_data/` is a **duplicate** produced by running the binary from the
-repo root (the Makefile's `go build ./apps/server/cmd/slopstack` and a bare
-`./slopstack serve` do exactly that). Its collection set and schema must not be
+repo root (the Makefile's `go build ./apps/server/cmd/taskboard` and a bare
+`./taskboard serve` do exactly that). Its collection set and schema must not be
 assumed identical to `apps/server/pb_data`; `apps/server/pb_data` is the one the
 dev loop uses because `pnpm dev:server` `cd`s into `apps/server` first.
 
@@ -339,18 +337,18 @@ dev loop uses because `pnpm dev:server` `cd`s into `apps/server` first.
 | --- | --- |
 | `pnpm dev` | `concurrently` runs `dev:server` + `dev:web` |
 | `pnpm dev:server` | `cd apps/server && go run github.com/air-verse/air@latest -c .air.toml` |
-| `pnpm dev:web` | `pnpm --filter @slopstack/web dev` → `vite` |
+| `pnpm dev:web` | `pnpm --filter @taskboard/web dev` → `vite` |
 | `pnpm build` | `pnpm -r build` (web: `tsc -b && vite build`) |
 | `pnpm lint` / `pnpm test` | recursed to workspace packages |
-| `pnpm generate:api` | `go run ./apps/server/cmd/slopstack openapi export` |
+| `pnpm generate:api` | `go run ./apps/server/cmd/taskboard openapi export` |
 | `pnpm generate:client` | `openapi-ts -i ../../openapi/openapi.json -o src/api/generated` |
 | `make dev/build/test/lint/generate/migrate/docker` | thin wrappers over the above |
 
-`apps/server/.air.toml`: builds `./tmp/slopstack` from `./cmd/slopstack`, runs
-`SLOPSTACK_DEVELOPMENT=true ./tmp/slopstack serve --http=${SLOPSTACK_HTTP_ADDRESS:-0.0.0.0:8090}`,
+`apps/server/.air.toml`: builds `./tmp/taskboard` from `./cmd/taskboard`, runs
+`TASKBOARD_DEVELOPMENT=true ./tmp/taskboard serve --http=${TASKBOARD_HTTP_ADDRESS:-0.0.0.0:8090}`,
 watches `go,json,yaml,yml,toml`, excludes `tmp`, `pb_data`, `node_modules`.
 Note `air@latest` is fetched on every `pnpm dev` — unpinned and network-dependent.
 
 `docker-compose.yml` builds the root `Dockerfile`, maps `8090:8090`, sets
-`SLOPSTACK_STORAGE_PATH=/app/pb_data`, enables backups, and mounts the named
-volume `slopstack-data` at `/app/pb_data`.
+`TASKBOARD_STORAGE_PATH=/app/pb_data`, enables backups, and mounts the existing
+named volume `slopstack-data` at `/app/pb_data` to preserve deployed data.

@@ -12,7 +12,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/types"
 
-	"github.com/slopstack/slopstack/apps/server/internal/reminders"
+	"github.com/andreasmolnardev/taskboard/apps/server/internal/reminders"
 )
 
 const (

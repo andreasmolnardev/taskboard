@@ -1,7 +1,19 @@
-import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router';
+import { pb } from './api/pocketbase';
 import { App } from './app';
 
-const rootRoute = createRootRoute({ component: App });
+const rootRoute = createRootRoute({
+  beforeLoad: ({ location }) => {
+    const isAuthRoute = location.pathname.startsWith('/auth/');
+    if (!pb.authStore.isValid && !isAuthRoute) {
+      throw redirect({ to: '/auth/login', replace: true });
+    }
+    if (pb.authStore.isValid && isAuthRoute) {
+      throw redirect({ to: '/', replace: true });
+    }
+  },
+  component: App,
+});
 
 const upcomingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' });
 const calendarRoute = createRoute({

@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
+	calendarengine "github.com/andreasmolnardev/taskboard/apps/server/internal/calendar"
 	ical "github.com/emersion/go-ical"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
-	calendarengine "github.com/slopstack/slopstack/apps/server/internal/calendar"
 )
 
 const (

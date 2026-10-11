@@ -5,14 +5,14 @@
   "repository": {
     "name": "taskboard",
     "commit": "75b827a741f3ff537a226f57191f0be5006931cb",
-    "modulePath": "github.com/slopstack/slopstack",
-    "webPackageName": "@slopstack/web",
-    "rootPackageName": "slopstack",
-    "binaryPath": "apps/server/cmd/slopstack",
-    "cliRootCommand": "slopstack",
-    "envPrefix": "SLOPSTACK_",
-    "identityFixed": false,
-    "note": "Module and package names still carry the slopstack template identity; Phase 1 renames them."
+    "modulePath": "github.com/andreasmolnardev/taskboard",
+    "webPackageName": "@taskboard/web",
+    "rootPackageName": "taskboard",
+    "binaryPath": "apps/server/cmd/taskboard",
+    "cliRootCommand": "taskboard",
+    "envPrefix": "TASKBOARD_",
+    "identityFixed": true,
+    "note": "The recorded commit and compatibility snapshot are historical Phase 0 data. Current identity was updated in Phase 1; SLOPSTACK_* remains a deprecated fallback."
   },
   "toolVersions": {
     "go": "go1.27.1",
@@ -21,10 +21,10 @@
     "node": "22.23.2",
     "pnpm": "11.8.0",
     "packageManagerPinnedInPackageJson": "pnpm@11.8.0",
-    "ciPnpm": "11",
-    "ciNode": "24",
-    "ciGo": "stable",
-    "ciMatchesLocalToolchain": false
+    "ciPnpm": "11.8.0",
+    "ciNode": "22.23.2",
+    "ciGo": "1.27.1",
+    "ciMatchesLocalToolchain": true
   },
   "dependencyVersions": {
     "github.com/pocketbase/pocketbase": "v0.39.6",
@@ -350,14 +350,27 @@
       "source": "internal/app/search.go:76"
     },
     {
-      "method": "GET",
+      "method": "ANY",
       "path": "/api/todos",
       "auth": "bearer",
-      "status": 200,
-      "response": [],
-      "note": "hard-coded empty array; documented as openapiOperationId listTodos",
-      "openapiOperationId": "listTodos",
-      "source": "internal/app/app.go:242"
+      "operations": [
+        "GET listTodos",
+        "POST createTodo (201)"
+      ],
+      "runtime": "Huma adapter bridge injects the authenticated PocketBase RequestEvent into context",
+      "source": "internal/app/app.go:211; internal/app/todos_api.go"
+    },
+    {
+      "method": "ANY",
+      "path": "/api/todos/{id}",
+      "auth": "bearer",
+      "operations": [
+        "GET getTodo",
+        "PATCH updateTodo",
+        "DELETE deleteTodo (204)"
+      ],
+      "ownership": "Reads and mutations only resolve records owned by the authenticated user; others return 404",
+      "source": "internal/app/todos_api.go"
     },
     {
       "method": "ANY",
@@ -2134,13 +2147,50 @@
     "clientGenerator": "@hey-api/openapi-ts",
     "clientOutput": "apps/web/src/api/generated",
     "clientOutputGitignored": true,
-    "operationCount": 1,
+    "operationCount": 5,
     "operations": [
       {
         "operationId": "listTodos",
         "method": "GET",
         "path": "/api/todos",
-        "schema": "Todo{id,title,completed}",
+        "schema": "Todo[]",
+        "security": [
+          "pocketbaseAuth"
+        ]
+      },
+      {
+        "operationId": "createTodo",
+        "method": "POST",
+        "path": "/api/todos",
+        "schema": "TodoInput -> Todo",
+        "status": 201,
+        "security": [
+          "pocketbaseAuth"
+        ]
+      },
+      {
+        "operationId": "getTodo",
+        "method": "GET",
+        "path": "/api/todos/{id}",
+        "schema": "Todo",
+        "security": [
+          "pocketbaseAuth"
+        ]
+      },
+      {
+        "operationId": "updateTodo",
+        "method": "PATCH",
+        "path": "/api/todos/{id}",
+        "schema": "TodoInput -> Todo",
+        "security": [
+          "pocketbaseAuth"
+        ]
+      },
+      {
+        "operationId": "deleteTodo",
+        "method": "DELETE",
+        "path": "/api/todos/{id}",
+        "status": 204,
         "security": [
           "pocketbaseAuth"
         ]
@@ -2149,7 +2199,7 @@
     "securitySchemes": [
       "pocketbaseAuth"
     ],
-    "note": "Every /api/* route except listTodos is absent from the generated contract."
+    "note": "The five Todo operations are generated from the live Huma handlers served through the PocketBase router bridge."
   },
   "inheritedButUnused": {
     "webUiComponentsTotal": 60,
@@ -2225,7 +2275,6 @@
       "collections groups/permissions/group_members/group_permissions/user_permissions are never read",
       "audit_logs collection is declared in schema.go but written by no code",
       "Config.SecureCookies and Config.LogLevel are parsed but never read",
-      "GET /api/todos returns a hard-coded empty array",
       "stale comment in search.go:73 claiming registerSearchRoutes is not wired up (it is)",
       "stale comment in occurrences.go:51 claiming registerOccurrenceRoutes is not wired up (it is)"
     ]

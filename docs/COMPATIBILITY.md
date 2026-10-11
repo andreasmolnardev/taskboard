@@ -1,11 +1,34 @@
-# Taskboard — Compatibility Contract (Phase 0 baseline)
+# Taskboard — Compatibility Contract and Runtime Status
 
-Frozen at commit `75b827a`. Every claim here was read out of the source tree or
-measured; where a claim is about *runtime* behaviour it is marked.
+## Current runtime snapshot
+
+The detailed inventory below is a historical Phase 0 baseline frozen at commit
+`75b827a`. It records the source and behavior at that revision; it is not a
+description of the current checkout. The current runtime facts below were
+checked against the current source tree.
+
+- The server executable and PocketBase root command are named `taskboard`.
+- The server exposes the shared backup command tree as `taskboard backup`.
+  Supported subcommands are `create`, `json`, `key-init`, `key-import`,
+  `list`, and `restore`.
+- Runtime configuration uses `TASKBOARD_*`. For matching settings, the shared
+  config lookup still accepts the old `SLOPSTACK_*` name; `TASKBOARD_*` wins
+  when both are set. The restore re-exec guard is
+  `TASKBOARD_BACKUP_RESTORE_RESTARTED`.
+- Taskboard serves live Huma Todo CRUD operations through the PocketBase router:
+  `GET` and `POST /api/todos`, plus `GET`, `PATCH`, and `DELETE
+  /api/todos/{id}`. Huma handlers use the authenticated PocketBase request
+  event and scope every read and write to that user. The existing PocketBase
+  collection API remains available to the web client.
+
+The sections marked **Phase 0 historical baseline** below preserve the exact
+older snapshot and its original command names and environment variables.
 
 ---
 
-## 1. Baseline commands and results
+## Phase 0 historical baseline
+
+### 1. Baseline commands and results
 
 Run from `apps/server` and the repo root respectively.
 
@@ -46,7 +69,7 @@ src/components/time-grid/time-grid.test.tsx
 `pnpm -r build` (`tsc -b && vite build`) also passes but is not part of the
 recorded baseline; CI runs it.
 
-## 2. Tool versions
+### 2. Tool versions (Phase 0 historical baseline)
 
 | tool | version |
 | --- | --- |
@@ -63,13 +86,13 @@ recorded baseline; CI runs it.
 | TanStack Router / Query | `^1.133.15` / `^5.90.12` |
 | Vite / TS / Vitest | `^7.3.1` / `^5.9.3` / `^4.0.16` |
 
-> **Note.** CI pins `pnpm 11` and `node 24` (`.github/workflows/ci.yml`), which
-> does **not** match the locally recorded `pnpm 11.8.0` / `node 22.23.2`. Phase 1
-> must reconcile this; see `docs/AGENT-NOTES.md`.
+> **Note.** CI now pins the recorded `pnpm 11.8.0`, `node 22.23.2`, and
+> `go1.27.1` toolchain. The `go 1.26.0` directive remains a minimum language
+> version rather than the CI compiler version.
 
 ---
 
-## 3. HTTP route surface
+### 3. HTTP route surface (Phase 0 historical baseline)
 
 Routes registered on PocketBase's chi router (`e.Router.*` inside
 `internal/app`). Verified by grep across the whole package; there are no other
@@ -140,20 +163,20 @@ CalDAV advertises `DAV: 1, 3, calendar-access`, realm `Taskboard CalDAV`, and
 CardDAV advertises `DAV: 1, addressbook`, realm `Taskboard CardDAV`, same `Allow`.
 CalDAV body limit 10 MiB; query result limit 500.
 
-### 3.7 Todos (stub)
+#### 3.7 Todos (Phase 0 historical behavior)
 
 | method | path | file | notes |
 | --- | --- | --- | --- |
-| GET | `/api/todos` | `app.go:242` | requires auth; returns `[]` (hard-coded empty array). A documentation-only Huma operation with the same method+path (`listTodos`) is registered on the Huma API and does nothing |
+| GET | `/api/todos` | Phase 0 `app.go:242` | At this historical snapshot it required auth and returned a hard-coded empty array; `listTodos` was not connected to a live Huma adapter. |
 
-`openapi/openapi.json` currently contains **exactly one** operation: `listTodos`
-(`GET /api/todos`, schema `Todo{id,title,completed}`, security `pocketbaseAuth`).
-Every other route above is undocumented in the generated contract. CI regenerates
-and diffs this file, so it is part of the compatibility surface.
+At Phase 0, `openapi/openapi.json` contained only a documentation stub. Current
+source registers the five live operations listed in the runtime snapshot above;
+the Huma adapter serves those same handlers through the PocketBase route bridge.
+CI regenerates the OpenAPI document and typed client from those operations.
 
 ---
 
-## 4. Collections and access rules
+### 4. Collections and access rules (Phase 0 historical baseline)
 
 Read from the live database `apps/server/pb_data/data.db` (`_collections` table).
 `ensureCol` = the rule is also declared in `internal/app/schema.go`.
@@ -240,7 +263,7 @@ users           : id, password, tokenKey, email, emailVisibility, verified, name
 
 ---
 
-## 5. Auth mechanisms
+### 5. Auth mechanisms (Phase 0 historical baseline)
 
 ### 5.1 `auth.go` — thin helpers
 
@@ -334,7 +357,7 @@ On `users` create-success, for the new owner:
 
 ---
 
-## 6. Backup subsystem and CLI
+### 6. Backup subsystem and CLI (Phase 0 historical baseline)
 
 ### 6.1 Files
 
@@ -383,7 +406,7 @@ newest of each.
 
 ---
 
-## 7. Compatibility rule set
+### 7. Compatibility rule set (Phase 0 historical baseline)
 
 These are the invariants that **must not change** while functionality moves into
 shared Slopstack packages. Each is a hard requirement, not a preference.
@@ -473,3 +496,14 @@ and the 400/403 message strings are relied on by the client.
 `EnsureCollections` → `EnsureNotificationCollections` → `EnsureCalDAVChanges` →
 `EnsureCardDAVChanges` → `applyBackupConfig`. Several of these repair older
 databases and are not equivalent to a fresh migration run.
+
+## Synthetic legacy-schema regression
+
+`go test ./apps/server -run TestSyntheticLegacyTaskboardSchemaUpgradePreservesRecords -count=1`
+uses `tests.NewTestApp()` to create a disposable database, seeds an existing user,
+todo, event, and contact using an older Taskboard schema, and runs the registered
+app migrations plus the current bootstrap schema repairs twice. It asserts that
+collection IDs, record IDs, and representative values survive and that newer
+fields are added. This is synthetic legacy-schema coverage; it does not replace
+the Phase 7 requirement to test disposable copies of populated real-schema
+databases from older releases, including restore.

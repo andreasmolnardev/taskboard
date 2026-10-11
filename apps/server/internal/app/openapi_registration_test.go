@@ -24,4 +24,9 @@ func TestRegisterMakesTodoOperationAvailableBeforeServe(t *testing.T) {
 	if !strings.Contains(string(document), `"/api/todos"`) {
 		t.Fatal("OpenAPI document does not contain /api/todos before server start")
 	}
+	for _, operationID := range []string{"listTodos", "createTodo", "getTodo", "updateTodo", "deleteTodo"} {
+		if !strings.Contains(string(document), `"operationId":"`+operationID+`"`) {
+			t.Errorf("OpenAPI document does not contain operation %q", operationID)
+		}
+	}
 }

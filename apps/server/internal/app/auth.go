@@ -1,6 +1,9 @@
 package app
 
-import "github.com/pocketbase/pocketbase/core"
+import (
+	"github.com/pocketbase/pocketbase/core"
+	"github.com/andreasmolnardev/slopstack/go/auth"
+)
 
 // RegistrationAllowed centralizes the registration policy for custom endpoints
 // and hooks. PocketBase owns sessions, verification, and password reset flows.
@@ -17,8 +20,5 @@ func RegistrationRequiresOTP(config Config) bool {
 }
 
 func CurrentUser(event *core.RequestEvent) (*core.Record, error) {
-	if event.Auth == nil {
-		return nil, event.UnauthorizedError("authentication required", nil)
-	}
-	return event.Auth, nil
+	return auth.CurrentUser(event)
 }

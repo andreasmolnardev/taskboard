@@ -1,5 +1,12 @@
 # Taskboard — Agent Notes (open technical debt)
 
+Phase 1 identity update: the current module path is
+`github.com/andreasmolnardev/taskboard`, the web package is `@taskboard/web`,
+and the CLI is `taskboard`. This file's Phase 0 identity inventory and ordered
+migration suggestions below describe the earlier baseline. Runtime reads
+`TASKBOARD_*` first and supports `SLOPSTACK_*` as a legacy fallback. The Compose
+volume name and PocketBase data path stay unchanged.
+
 Phase 0 companion to `docs/ARCHITECTURE.md`, `docs/COMPATIBILITY.md`,
 `docs/EXTRACTION-INVENTORY.md` and `docs/baseline.json`.
 
@@ -46,13 +53,13 @@ audit** — `OnBootstrap` writes to `_collections` on every start (§3).
 
 ## 1. Module identity is still the template's
 
-Taskboard was copied from Slopstack and every identity surface still carries the
-template name. `docs/baseline.json` records this under `repository` with
-`identityFixed: false`; this section is the working list.
+This is the pre-migration identity audit. Taskboard now uses its own Go module,
+binary, package, and environment identities. The historical baseline and file
+locations below record what the audit found before those changes.
 
 | surface | file | current value |
 | --- | --- | --- |
-| Go module path | `go.mod:1` | `module github.com/slopstack/slopstack` |
+| Go module path | `go.mod:1` | former value: `module github.com/slopstack/slopstack` |
 | Go binary | `apps/server/cmd/slopstack/` | directory and binary named `slopstack` |
 | CLI root command | `apps/server/cmd/slopstack/main.go:21` | `pb.RootCmd.Use = "slopstack"` |
 | web package | `apps/web/package.json` | `"name": "@slopstack/web"` |
@@ -340,7 +347,7 @@ dead through two hops.
 | --- | --- |
 | `audit_logs` collection | declared at `schema.go:27`, **never written or read by any code**. `grep -rn 'audit_logs\|auditLog' apps/server --include=*.go` returns exactly one hit — the declaration. Dead schema. |
 | `Authorize()` (`internal/app/authorization.go`) | **zero callers**: `grep -rn 'Authorize(' apps/server --include=*.go \| grep -v 'func Authorize'` is empty. Dead *and* it would deny every non-superuser if it were ever wired in. Enforcement today comes from PocketBase API rules + `registerOwnershipHooks`. |
-| `GET /api/todos` (`app.go:241-247`) | returns a hard-coded `[]`. The paired Huma operation `listTodos` (`app.go:238`) has a handler returning `nil, nil`. Both are placeholders. |
+| Todo HTTP API | **Resolved since the Phase 0 audit:** five Huma operations now provide owner-scoped list/create/read/update/delete handlers through the PocketBase router bridge. See `docs/COMPATIBILITY.md` §Current runtime snapshot. |
 | `groups`, `permissions`, `group_members`, `group_permissions`, `user_permissions` | collections exist with empty (superuser-only) API rules and are never read by any handler. Scaffolding. |
 | `Config.SecureCookies`, `Config.LogLevel` | declared (`config.go:22,24`), populated from `SLOPSTACK_SECURE_COOKIES` / `SLOPSTACK_LOG_LEVEL` (`config.go:48,50`), and **read nowhere** in the server. Setting them does nothing. |
 
@@ -513,14 +520,12 @@ which is where the auth flow and the tab routing live.
 
 ### 6.5 OpenAPI surface is almost entirely undocumented
 
-`openapi/openapi.json` contains exactly **one** operation: `GET /api/todos`
-(`listTodos`) — a stub. The other **26** registered routes have no OpenAPI
-entry, so the published contract does not describe auth, CalDAV, CardDAV,
-search, notifications, reminders, occurrences or ICS import/export. Since the
-generated client (`apps/web/src/api/generated/`) is produced from this document,
-and the web app talks to PocketBase directly for CRUD, the practical effect is
-that the Huma layer currently documents dead surface and omits live surface.
-Either document the real routes or remove the Huma layer — do not leave it as is.
+At the Phase 0 audit, `openapi/openapi.json` contained one stub operation for
+`GET /api/todos`. **Resolved for Todo CRUD:** the current document contains five
+live Huma operations for list/create/read/update/delete, served through the
+PocketBase request context bridge. Other custom routes remain outside the Huma
+contract; the web app continues to use PocketBase directly for its collection
+CRUD.
 
 ### 6.6 Toolchain
 
@@ -625,10 +630,10 @@ Each step must leave `go build ./...`, `go test ./...` (from `apps/server`),
    data-directory change may appear in this commit.**
 7. **Rename the env prefix (§1.2)** — separate, breaking commit, with a
    deprecated fallback for `SLOPSTACK_*` and a `docs/DEPLOYMENT.md` note.
-8. **Prune the inherited dead code (§4)**: delete the 51 unused `ui/`
-   components and `hooks/use-mobile.ts`; delete or implement `audit_logs`,
-   `Authorize()`, the `/api/todos` stub, and `Config.SecureCookies` /
-   `Config.LogLevel`.
+8. **Prune inherited dead code (§4)**: delete the 51 unused `ui/`
+   components and `hooks/use-mobile.ts`; evaluate `audit_logs`, `Authorize()`,
+   and `Config.SecureCookies` / `Config.LogLevel`. The Todo API item from that
+   original checklist is implemented in the current checkout.
 
 Steps 1–2 are safe and unblock everything. Steps 6–8 are where a mistake costs
 data, which is why they come last and are one-commit-each.

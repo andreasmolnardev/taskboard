@@ -49,3 +49,5 @@ jobs:
       - run: git diff --exit-code
       - name: Verify baseline matches source
         run: python3 scripts/check-baseline.py
+      - name: Verify Taskboard deployment metadata
+        run: node scripts/check-taskboard-config.mjs

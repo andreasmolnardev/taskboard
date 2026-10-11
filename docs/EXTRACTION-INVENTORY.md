@@ -188,7 +188,9 @@ this is the strongest justification for the extraction phase.
 Differing tests: `caldav_test.go`, `carddav_test.go`, `backup_command_test.go`,
 `http_integration_test.go`, `openapi_registration_test.go`, `schema_test.go`.
 
-Both repos also share: `module github.com/slopstack/slopstack`, the
+Before the identity migration, both repos also shared `module
+github.com/slopstack/slopstack`; the current shared module is
+`github.com/andreasmolnardev/slopstack`. Each app now keeps its own module path.
 `apps/server/cmd/slopstack` binary name, the `@slopstack/web` package name, the
 `SLOPSTACK_*` env prefix, and the identical `pb_migrations` prefix
 (`20260824000000_add_user_is_admin.go` … `20260915000000_add_todo_calendar.go`).

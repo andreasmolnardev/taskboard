@@ -1,13 +1,13 @@
 package app
 
 import (
-	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
 	"net/http"
+	"os"
 	"strings"
 
+	"github.com/andreasmolnardev/slopstack/go/httpapi"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
@@ -19,6 +19,11 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 	pb.RootCmd.PersistentFlags().StringVar(&config.HTTPAddress, "http", config.HTTPAddress, "HTTP address")
 	pb.OnBootstrap().BindFunc(func(e *core.BootstrapEvent) error {
 		if err := e.Next(); err != nil {
+			return err
+		}
+		// Reject invalid backup scheduling settings before migrations can change
+		// the database. The full backup-store settings are applied below.
+		if err := validatePreMigrationConfig(config); err != nil {
 			return err
 		}
 		if err := cleanupTransientBackupArchives(e.App.DataDir()); err != nil {
@@ -60,6 +65,13 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 		registerRoutes(e, config, api)
 		return e.Next()
 	})
+}
+
+func validatePreMigrationConfig(config Config) error {
+	if !config.BackupEnabled {
+		return nil
+	}
+	return validateBackupSchedule(config.BackupCron, config.BackupMaxKeep)
 }
 
 func applyBackupConfig(app core.App, config Config) error {
@@ -162,7 +174,7 @@ func protectUserAdminFlag(pb *pocketbase.PocketBase, config Config) {
 			code := activationCode()
 			e.Record.Set("activation_code", code)
 			e.Record.Set("registration_status", "awaiting_activation")
-			log.Printf("registration activation code email=%s code=%s", e.Record.GetString("email"), code)
+			e.App.Logger().Info("registration activation code generated; delivery is not configured")
 		} else {
 			e.Record.Set("registration_status", "awaiting_approval")
 		}
@@ -196,7 +208,12 @@ func registerRoutes(e *core.ServeEvent, config Config, api huma.API) {
 	registerCalDAVRoutes(e)
 	registerCardDAVRoutes(e)
 	registerSearchRoutes(e)
-	registerTodoRoutes(e, config)
+	registerTodoRoutes(e, config, api)
+	publicDir := os.Getenv("TASKBOARD_PUBLIC_DIR")
+	if publicDir == "" {
+		publicDir = "public"
+	}
+	httpapi.RegisterStaticDirectory(e, publicDir)
 }
 
 func registerAuthRoutes(e *core.ServeEvent, config Config) {
@@ -230,20 +247,10 @@ func registerAuthRoutes(e *core.ServeEvent, config Config) {
 }
 
 func registerTodoAPI(api huma.API) {
-	type todo struct {
-		ID        string `json:"id"`
-		Title     string `json:"title"`
-		Completed bool   `json:"completed"`
-	}
-	huma.Register(api, huma.Operation{OperationID: "listTodos", Method: http.MethodGet, Path: "/api/todos", Tags: []string{"Todos"}, Summary: "List the current user's todos", Security: []map[string][]string{{"pocketbaseAuth": {}}}}, func(_ context.Context, _ *struct{}) (*struct{ Body []todo }, error) { return nil, nil })
+	registerTodoOpenAPI(api)
 }
 
-func registerTodoRoutes(e *core.ServeEvent, config Config) {
-	e.Router.GET("/api/todos", func(event *core.RequestEvent) error {
-		if event.Auth == nil {
-			return event.UnauthorizedError("authentication required", nil)
-		}
-		return event.JSON(http.StatusOK, []any{})
-	})
+func registerTodoRoutes(e *core.ServeEvent, config Config, api huma.API) {
+	registerTodoHTTPRoutes(e, api)
 	_ = config
 }

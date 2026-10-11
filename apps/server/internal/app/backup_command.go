@@ -18,7 +18,7 @@ import (
 
 var backupNamePattern = regexp.MustCompile(`^@?[a-z0-9_-]+\.zip(\.enc)?$`)
 
-const backupRestoreRestartedEnv = "SLOPSTACK_BACKUP_RESTORE_RESTARTED"
+const backupRestoreRestartedEnv = "TASKBOARD_BACKUP_RESTORE_RESTARTED"
 
 type BackupFile struct {
 	Name     string
@@ -192,7 +192,7 @@ func (c *BackupCommand) restoreCommand() *cobra.Command {
 			if !confirmed {
 				return errors.New("restore requires --confirm")
 			}
-			if os.Getenv(backupRestoreRestartedEnv) == "1" {
+			if env(backupRestoreRestartedEnv, "") == "1" {
 				return nil
 			}
 			if err := os.Setenv(backupRestoreRestartedEnv, "1"); err != nil {

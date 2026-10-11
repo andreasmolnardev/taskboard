@@ -3,8 +3,9 @@
 
 Two cheap, deterministic checks that need no database:
 
-1. every ``e.Router.<METHOD>("<path>"`` in apps/server/internal/app appears in
-   baseline.json "routes", and every baseline route still appears in the source;
+1. every route registered directly with ``e.Router`` or through the shared
+   HTTP API adapters in apps/server/internal/app appears in baseline.json
+   "routes", and every baseline route still appears in the source;
 2. the toolchain recorded in baseline.json still matches the pinned versions
    used by .github/workflows/ci.yml.
 
@@ -24,6 +25,11 @@ WORKFLOW = os.path.join(REPO, ".github", "workflows", "ci.yml")
 SERVER = os.path.join(REPO, "apps", "server", "internal", "app")
 
 ROUTE_RE = re.compile(r'e\.Router\.(GET|POST|PUT|PATCH|DELETE|Any|OPTIONS)\("([^"]+)"')
+HUMA_ROUTES_RE = re.compile(
+    r'httpapi\.RegisterHumaRoutes\(\s*e\s*,\s*api\s*,\s*\[\]string\{(.*?)\}\s*,\s*func',
+    re.DOTALL,
+)
+STRING_RE = re.compile(r'"([^"]+)"')
 
 EXPECTED_NODE = "22.23.2"
 EXPECTED_PNPM = "11.8.0"
@@ -39,6 +45,19 @@ def source_routes() -> set[tuple[str, str]]:
             text = fh.read()
         for method, path in ROUTE_RE.findall(text):
             found.add((method, path))
+        # The shared Huma adapter registers one PocketBase ANY route per path.
+        for route_list in HUMA_ROUTES_RE.findall(text):
+            for path in STRING_RE.findall(route_list):
+                found.add(("ANY", path))
+        # RegisterOpenAPIDocs mounts these three GET routes as a shared adapter.
+        if re.search(r'httpapi\.RegisterOpenAPIDocs\(\s*e\s*,\s*api\s*\)', text):
+            found.update(
+                {
+                    ("GET", "/openapi.json"),
+                    ("GET", "/openapi.yaml"),
+                    ("GET", "/docs"),
+                }
+            )
     return found
 
 

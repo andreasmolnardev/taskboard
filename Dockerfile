@@ -1,4 +1,6 @@
-FROM node:22.23.2-alpine3.24 AS web-build
+# The web bundle is architecture-independent. Build it on BuildKit's native
+# platform so esbuild does not run a target-architecture binary through QEMU.
+FROM --platform=$BUILDPLATFORM node:22.23.2-alpine3.24 AS web-build
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
@@ -8,12 +10,14 @@ COPY scripts scripts
 COPY apps/web apps/web
 RUN pnpm --filter @taskboard/web build
 
-FROM golang:1.27.1-alpine3.24 AS server-build
+FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine3.24 AS server-build
 WORKDIR /src
+ARG TARGETOS
+ARG TARGETARCH
 COPY go.mod go.sum ./
 RUN go mod download
 COPY apps/server apps/server
-RUN CGO_ENABLED=0 go build -o /taskboard ./apps/server/cmd/taskboard
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /taskboard ./apps/server/cmd/taskboard
 
 FROM alpine:3.24.2
 RUN addgroup -S taskboard && adduser -S taskboard -G taskboard

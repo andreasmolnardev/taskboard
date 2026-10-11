@@ -9,8 +9,9 @@
 - Bounded recurrence engine and occurrence API.
 - Deep server search.
 - In-app reminder and notification backend.
-- Basic CardDAV and beta CalDAV protocol support.
-- Scheduled local or S3-compatible backups plus manual backup/restore CLI.
+- vCard 3.0/4.0 CardDAV contact sync with discovery, queries, multiget, ETags, and sync tokens.
+- CalDAV event/task sync with ETags, recurrence-aware queries, complete DAV resource preservation, and sync tokens.
+- Encrypted scheduled local or S3-compatible PocketBase archives, recovery-key setup, manual restore CLI, and optional encrypted JSON data exports.
 - Initial server and web test suites.
 
 ## Near term: make core calendar behavior reliable
@@ -33,15 +34,7 @@
 
 ## CalDAV readiness
 
-1. Persist stable client-selected resource hrefs.
-2. Make ETag checks and writes transactional.
-3. Use recurrence-aware time-range queries.
-4. Add deterministic query limits and deletion tombstones.
-5. Add sync tokens and `sync-collection` support.
-6. Preserve complete calendar objects, including recurrence overrides and unknown properties.
-7. Test with Apple Calendar, Thunderbird, and DAVx5.
-
-CalDAV remains beta until these items pass interoperability tests.
+The core CalDAV resource and sync behavior is implemented. Remaining work is external interoperability validation with Apple Calendar, Thunderbird, and DAVx5, plus scheduling, sharing, ACLs, invitations, attendee replies, and free/busy support.
 
 ## Product work
 

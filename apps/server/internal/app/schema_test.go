@@ -93,8 +93,8 @@ func TestApplyBackupConfig(t *testing.T) {
 	if err := applyBackupConfig(testApp, config); err != nil {
 		t.Fatal(err)
 	}
-	if testApp.Settings().Backups.Cron != config.BackupCron {
-		t.Fatalf("expected backup cron %q", config.BackupCron)
+	if testApp.Settings().Backups.Cron != "" {
+		t.Fatal("PocketBase's unencrypted backup scheduler must remain disabled")
 	}
 	if testApp.Settings().Backups.CronMaxKeep != config.BackupMaxKeep {
 		t.Fatalf("expected backup retention %d", config.BackupMaxKeep)

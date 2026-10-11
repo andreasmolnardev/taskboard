@@ -3,8 +3,10 @@ import { Plus } from 'lucide-react';
 import type { RecordModel } from 'pocketbase';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useTheme } from 'next-themes';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sidebar, type SidebarTab } from './components/sidebar';
 import { apiFetch } from './api/client';
+import { taskboardQueryKeys } from './api/query-keys';
 import { pb } from './api/pocketbase';
 import { accentColors, entries, fontSizes, getActiveContainers, lists, type Entry } from './data';
 import { CalendarTab } from './components/tabs/calendar-tab';
@@ -83,16 +85,15 @@ export function App() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationsClosing, setNotificationsClosing] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
+  const queryClient = useQueryClient();
   const notificationsRef = useRef<HTMLDivElement>(null);
   const [createType, setCreateType] = useState('task');
   const [createColor, setCreateColor] = useState(accentColors[0].value);
   const [listOnlyComposer, setListOnlyComposer] = useState(false);
   const [taskEventOnlyComposer, setTaskEventOnlyComposer] = useState(false);
   const [editingEntry, setEditingEntry] = useState<import('./data').Entry | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [dataError, setDataError] = useState('');
   const [, setDataVersion] = useState(0);
-  const loadVersion = useRef(0);
   const knownUserId = useRef(pb.authStore.record?.id ?? '');
   const { resolvedTheme, setTheme } = useTheme();
   useEffect(() => {
@@ -108,6 +109,10 @@ export function App() {
   const closeNotifications = () => {
     setNotificationsClosing(false);
     setNotificationsOpen(false);
+  };
+  const refreshData = () => {
+    if (!authUserId) return;
+    void queryClient.invalidateQueries({ queryKey: taskboardQueryKeys.homeData(authUserId) });
   };
 
   useEffect(() => {
@@ -149,7 +154,6 @@ export function App() {
       const userChanged = nextUserId !== knownUserId.current;
       knownUserId.current = nextUserId;
       if (userChanged) {
-        loadVersion.current += 1;
         entries.splice(0, entries.length);
         lists.splice(0, lists.length);
         setDataVersion((version) => version + 1);
@@ -181,16 +185,12 @@ export function App() {
       selectedSize?.size ?? fontSizes[1].size,
     );
   }, [authenticated, authUserId]);
-  useEffect(() => {
-    if (!authenticated || !authUserId) return;
-    const userId = authUserId;
-    const version = ++loadVersion.current;
-    const isCurrent = () => version === loadVersion.current && pb.authStore.record?.id === userId;
-    entries.splice(0, entries.length);
-    lists.splice(0, lists.length);
-    setDataVersion((current) => current + 1);
-    setDataError('');
-    const loadEntries = async () => {
+  const homeDataQuery = useQuery({
+    queryKey: taskboardQueryKeys.homeData(authUserId),
+    enabled: authenticated && Boolean(authUserId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const userId = authUserId;
       const filter = `owner = "${userId}"`;
       const [tasks, events, taskLists, calendars] = await Promise.all([
         pb.collection('todos').getFullList({ filter, sort: 'due_date' }),
@@ -272,7 +272,6 @@ export function App() {
         occurrenceError = true;
         console.warn('Could not load recurring events.', error);
       }
-      if (!isCurrent()) return;
       const eventById = new Map(events.map((record) => [record.id, record]));
       const recurringEventIds = new Set(
         events.filter(recordHasRecurrence).map((record) => record.id),
@@ -336,23 +335,17 @@ export function App() {
         ...eventEntries,
         ...recurringFallbacks,
       ];
-      if (!isCurrent()) return;
       const activeContainerIds = new Set(
         getActiveContainers(containers).map((container) => container.id),
       );
-      entries.splice(
-        0,
-        entries.length,
-        ...loadedEntries.filter(
+      return {
+        userId,
+        entries: loadedEntries.filter(
           (entry) =>
             activeContainerIds.has(entry.containerId) &&
             !hiddenContainerIds.includes(entry.containerId),
         ),
-      );
-      lists.splice(
-        0,
-        lists.length,
-        ...containers.map((container) => ({
+        lists: containers.map((container) => ({
           id: container.id,
           name: String(container.name),
           color: String(container.color || '#3b6ea8'),
@@ -361,18 +354,23 @@ export function App() {
           archived: container.archived,
           count: loadedEntries.filter((entry) => entry.containerId === container.id).length,
         })),
-      );
-      setDataError(
-        occurrenceError
+        error: occurrenceError
           ? 'Recurring events are unavailable. Showing their base events instead.'
           : '',
-      );
-      setDataVersion((current) => current + 1);
-    };
-    void loadEntries().catch(() => {
-      if (isCurrent()) setDataError('Could not load your entries.');
-    });
-  }, [authenticated, authUserId, refreshKey]);
+      };
+    },
+  });
+  useEffect(() => {
+    const data = homeDataQuery.data;
+    if (!data || data.userId !== authUserId || pb.authStore.record?.id !== authUserId) return;
+    entries.splice(0, entries.length, ...data.entries);
+    lists.splice(0, lists.length, ...data.lists);
+    setDataError(data.error);
+    setDataVersion((current) => current + 1);
+  }, [authUserId, homeDataQuery.data]);
+  useEffect(() => {
+    if (homeDataQuery.isError) setDataError('Could not load your entries.');
+  }, [homeDataQuery.isError]);
 
   const openCreateComposer = () => {
     setEditingEntry(null);
@@ -406,7 +404,7 @@ export function App() {
       />
     ) : activeTab === 'lists' ? (
       <ListsTab
-        onChanged={() => setRefreshKey((key) => key + 1)}
+        onChanged={refreshData}
         onEdit={(entry) => {
           setEditingEntry(entry);
           setCreateType(entry.type);
@@ -425,10 +423,10 @@ export function App() {
     ) : activeTab === 'people' ? (
       <PeopleTab />
     ) : activeTab === 'settings' ? (
-      <SettingsTab onChanged={() => setRefreshKey((key) => key + 1)} />
+      <SettingsTab onChanged={refreshData} />
     ) : (
       <UpcomingTab
-        onChanged={() => setRefreshKey((key) => key + 1)}
+        onChanged={refreshData}
         onEdit={(entry) => {
           setEditingEntry(entry);
           setCreateType(entry.type);
@@ -553,7 +551,7 @@ export function App() {
           setEditingEntry(null);
           setListOnlyComposer(false);
           setTaskEventOnlyComposer(false);
-          setRefreshKey((key) => key + 1);
+          refreshData();
         }}
       />
     </div>

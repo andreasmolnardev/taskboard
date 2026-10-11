@@ -15,7 +15,9 @@ func TestRegisterMakesTodoOperationAvailableBeforeServe(t *testing.T) {
 	pb := pocketbase.New()
 	api := humago.New(http.NewServeMux(), huma.DefaultConfig("Slopstack API", "0.1.0"))
 
-	Register(pb, Config{HTTPAddress: ":8090", PublicURL: "http://localhost:8090"}, api)
+	if err := Register(pb, Config{HTTPAddress: ":8090", PublicURL: "http://localhost:8090"}, api); err != nil {
+		t.Fatal(err)
+	}
 
 	document, err := json.Marshal(api.OpenAPI())
 	if err != nil {
@@ -23,5 +25,10 @@ func TestRegisterMakesTodoOperationAvailableBeforeServe(t *testing.T) {
 	}
 	if !strings.Contains(string(document), `"/api/todos"`) {
 		t.Fatal("OpenAPI document does not contain /api/todos before server start")
+	}
+	for _, operationID := range []string{"listTodos", "createTodo", "getTodo", "updateTodo", "deleteTodo"} {
+		if !strings.Contains(string(document), `"operationId":"`+operationID+`"`) {
+			t.Errorf("OpenAPI document does not contain operation %q", operationID)
+		}
 	}
 }

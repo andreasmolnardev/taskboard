@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, Check } from 'lucide-react';
 import {
   CommandDialog,
@@ -8,8 +9,9 @@ import {
   CommandItem,
   CommandList,
 } from '../ui/command';
-import { apiFetch } from '../../api/client';
+import { apiJson } from '../../api/client';
 import { pb } from '../../api/pocketbase';
+import { taskboardQueryKeys } from '../../api/query-keys';
 import { entries } from '../../data';
 
 type DeepResult = {
@@ -33,43 +35,25 @@ export function SearchTab({
 }) {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<'local' | 'deep'>('local');
-  const [deepResults, setDeepResults] = useState<DeepResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
 
   useEffect(() => {
-    if (mode !== 'deep' || !query.trim()) {
-      setDeepResults([]);
-      setError('');
-      return;
-    }
-    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      setLoading(true);
-      setError('');
-      const params = new URLSearchParams({ query: query.trim(), perPage: '50' });
-      void apiFetch(`/api/search?${params}`, {
-        headers: { Authorization: `Bearer ${pb.authStore.token}` },
-        signal: controller.signal,
-      })
-        .then(async (response) => {
-          if (!response.ok) throw new Error('Deep search failed.');
-          return (await response.json()) as { items: DeepResult[] };
-        })
-        .then((response) => setDeepResults(response.items))
-        .catch((reason: unknown) => {
-          if (!controller.signal.aborted)
-            setError(reason instanceof Error ? reason.message : 'Deep search failed.');
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setLoading(false);
-        });
+      setDebouncedQuery(query.trim());
     }, 250);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [mode, query]);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const userId = pb.authStore.record?.id ?? '';
+  const params = new URLSearchParams({ query: debouncedQuery, perPage: '50' });
+  const deepSearch = useQuery({
+    queryKey: taskboardQueryKeys.search(userId, debouncedQuery),
+    enabled: open && mode === 'deep' && Boolean(userId && debouncedQuery),
+    queryFn: ({ signal }) =>
+      apiJson<{ items: DeepResult[] }>(`/api/search?${params}`, { signal }),
+  });
+  const loading = mode === 'deep' && deepSearch.isFetching;
+  const error = mode === 'deep' && deepSearch.error instanceof Error ? deepSearch.error.message : '';
 
   const results =
     mode === 'local'
@@ -80,7 +64,7 @@ export function SearchTab({
           description: entry.description,
           container: entry.list,
         }))
-      : deepResults;
+      : deepSearch.data?.items ?? [];
   return (
     <CommandDialog
       open={open}

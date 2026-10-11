@@ -8,27 +8,30 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/andreasmolnardev/taskboard/apps/server/internal/app"
+	_ "github.com/andreasmolnardev/taskboard/apps/server/pb_migrations"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/pocketbase/pocketbase"
-	"github.com/slopstack/slopstack/apps/server/internal/app"
-	_ "github.com/slopstack/slopstack/apps/server/pb_migrations"
 )
 
 func main() {
 	config := app.LoadConfig()
 	pb := pocketbase.NewWithConfig(pocketbase.Config{DefaultDataDir: config.StoragePath, DefaultDev: config.Development})
-	pb.RootCmd.Use = "slopstack"
-	pb.RootCmd.Short = "Slopstack application server"
+	pb.RootCmd.Use = "taskboard"
+	pb.RootCmd.Short = "Taskboard application server"
 	if flag := pb.RootCmd.PersistentFlags().Lookup("http"); flag != nil {
 		flag.DefValue = config.HTTPAddress
 		_ = pb.RootCmd.PersistentFlags().Set("http", config.HTTPAddress)
 	}
 
 	api := newOpenAPI(config)
-	app.Register(pb, config, api)
+	if err := app.Register(pb, config, api); err != nil {
+		slog.Error("register Taskboard application", "error", err)
+		os.Exit(1)
+	}
 	registerExportCommand(pb, api)
-	pb.RootCmd.AddCommand(app.NewBackupCommand(pb).Command())
+	pb.RootCmd.AddCommand(app.NewBackupCommand(pb))
 
 	if err := pb.Start(); err != nil {
 		slog.Error("server stopped", "error", err)
@@ -37,7 +40,7 @@ func main() {
 }
 
 func newOpenAPI(config app.Config) huma.API {
-	api := humago.New(http.NewServeMux(), huma.DefaultConfig("Slopstack API", "0.1.0"))
+	api := humago.New(http.NewServeMux(), huma.DefaultConfig("Taskboard API", "0.1.0"))
 	api.OpenAPI().OpenAPI = "3.1.0"
 	api.OpenAPI().Servers = []*huma.Server{{URL: config.PublicURL}}
 	api.OpenAPI().Components.SecuritySchemes = map[string]*huma.SecurityScheme{

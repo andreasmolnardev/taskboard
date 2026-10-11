@@ -1,25 +1,36 @@
 package app
 
 import (
-	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
 	"net/http"
+	"os"
 	"strings"
 
+	"github.com/andreasmolnardev/slopstack/go/httpapi"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
 
-func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
+func Register(pb *pocketbase.PocketBase, config Config, api huma.API) error {
 	registerTodoAPI(api)
+	if err := registerAuditHooks(pb); err != nil {
+		return fmt.Errorf("register audit hooks: %w", err)
+	}
 	pb.RootCmd.PersistentFlags().StringVar(&config.HTTPAddress, "http", config.HTTPAddress, "HTTP address")
 	pb.OnBootstrap().BindFunc(func(e *core.BootstrapEvent) error {
 		if err := e.Next(); err != nil {
 			return err
+		}
+		// Reject invalid backup scheduling settings before migrations can change
+		// the database. The full backup-store settings are applied below.
+		if err := validatePreMigrationConfig(config); err != nil {
+			return err
+		}
+		if err := cleanupTransientBackupArchives(e.App.DataDir()); err != nil {
+			return fmt.Errorf("clean up temporary backup files: %w", err)
 		}
 		if err := e.App.RunAppMigrations(); err != nil {
 			return err
@@ -35,12 +46,19 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 		if err := EnsureCalDAVChanges(e.App); err != nil {
 			return err
 		}
+		if err := EnsureCardDAVChanges(e.App); err != nil {
+			return err
+		}
 		return applyBackupConfig(e.App, config)
 	})
 	protectUserAdminFlag(pb, config)
-	registerOwnershipHooks(pb)
+	if err := registerOwnershipHooks(pb); err != nil {
+		return fmt.Errorf("register ownership hooks: %w", err)
+	}
 	registerCalDAVChangeHooks(pb)
+	registerCardDAVChangeHooks(pb)
 	registerReminderScheduler(pb)
+	registerEncryptedBackupScheduler(pb, config)
 	pb.OnRecordAfterCreateSuccess("users").BindFunc(func(e *core.RecordEvent) error {
 		if err := provisionDefaultContainers(e.App, e.Record.Id); err != nil {
 			return err
@@ -52,6 +70,14 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 		registerRoutes(e, config, api)
 		return e.Next()
 	})
+	return nil
+}
+
+func validatePreMigrationConfig(config Config) error {
+	if !config.BackupEnabled {
+		return nil
+	}
+	return validateBackupSchedule(config.BackupCron, config.BackupMaxKeep)
 }
 
 func applyBackupConfig(app core.App, config Config) error {
@@ -65,7 +91,10 @@ func applyBackupConfig(app core.App, config Config) error {
 		return nil
 	}
 
-	settings.Backups.Cron = config.BackupCron
+	if err := validateBackupSchedule(config.BackupCron, config.BackupMaxKeep); err != nil {
+		return err
+	}
+	settings.Backups.Cron = ""
 	settings.Backups.CronMaxKeep = config.BackupMaxKeep
 	settings.Backups.S3 = core.S3Config{
 		Enabled:        config.BackupS3.Enabled,
@@ -151,7 +180,7 @@ func protectUserAdminFlag(pb *pocketbase.PocketBase, config Config) {
 			code := activationCode()
 			e.Record.Set("activation_code", code)
 			e.Record.Set("registration_status", "awaiting_activation")
-			log.Printf("registration activation code email=%s code=%s", e.Record.GetString("email"), code)
+			e.App.Logger().Info("registration activation code generated; delivery is not configured")
 		} else {
 			e.Record.Set("registration_status", "awaiting_approval")
 		}
@@ -166,17 +195,7 @@ func protectUserAdminFlag(pb *pocketbase.PocketBase, config Config) {
 }
 
 func registerRoutes(e *core.ServeEvent, config Config, api huma.API) {
-	e.Router.GET("/openapi.json", func(event *core.RequestEvent) error { return event.JSON(http.StatusOK, api.OpenAPI()) })
-	e.Router.GET("/openapi.yaml", func(event *core.RequestEvent) error {
-		data, err := api.OpenAPI().YAML()
-		if err != nil {
-			return err
-		}
-		return event.Blob(http.StatusOK, "application/yaml", data)
-	})
-	e.Router.GET("/docs", func(event *core.RequestEvent) error {
-		return event.HTML(http.StatusOK, "<!doctype html><html><body><redoc spec-url=\"/openapi.json\"></redoc><script src=\"https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js\"></script></body></html>")
-	})
+	httpapi.RegisterOpenAPIDocs(e, api)
 	registerAuthRoutes(e, config)
 	registerAppPasswordRoutes(e)
 	registerCalendarIORoutes(e)
@@ -185,7 +204,12 @@ func registerRoutes(e *core.ServeEvent, config Config, api huma.API) {
 	registerCalDAVRoutes(e)
 	registerCardDAVRoutes(e)
 	registerSearchRoutes(e)
-	registerTodoRoutes(e, config)
+	registerTodoRoutes(e, config, api)
+	publicDir := os.Getenv("TASKBOARD_PUBLIC_DIR")
+	if publicDir == "" {
+		publicDir = "public"
+	}
+	httpapi.RegisterStaticDirectory(e, publicDir)
 }
 
 func registerAuthRoutes(e *core.ServeEvent, config Config) {
@@ -219,20 +243,10 @@ func registerAuthRoutes(e *core.ServeEvent, config Config) {
 }
 
 func registerTodoAPI(api huma.API) {
-	type todo struct {
-		ID        string `json:"id"`
-		Title     string `json:"title"`
-		Completed bool   `json:"completed"`
-	}
-	huma.Register(api, huma.Operation{OperationID: "listTodos", Method: http.MethodGet, Path: "/api/todos", Tags: []string{"Todos"}, Summary: "List the current user's todos", Security: []map[string][]string{{"pocketbaseAuth": {}}}}, func(_ context.Context, _ *struct{}) (*struct{ Body []todo }, error) { return nil, nil })
+	registerTodoOpenAPI(api)
 }
 
-func registerTodoRoutes(e *core.ServeEvent, config Config) {
-	e.Router.GET("/api/todos", func(event *core.RequestEvent) error {
-		if event.Auth == nil {
-			return event.UnauthorizedError("authentication required", nil)
-		}
-		return event.JSON(http.StatusOK, []any{})
-	})
+func registerTodoRoutes(e *core.ServeEvent, config Config, api huma.API) {
+	registerTodoHTTPRoutes(e, api)
 	_ = config
 }

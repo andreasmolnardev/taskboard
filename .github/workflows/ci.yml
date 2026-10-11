@@ -4,6 +4,13 @@ on:
   push:
   pull_request:
 
+env:
+  # Pinned so the baseline recorded in docs/baseline.json is reproducible.
+  # scripts/check-baseline.py fails if these drift.
+  GO_VERSION: "1.27.1"
+  NODE_VERSION: "22.23.2"
+  PNPM_VERSION: "11.8.0"
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -11,19 +18,59 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 11
+          version: 11.8.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22.23.2
           cache: pnpm
       - uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version: 1.27.1
+          cache: true
+      - run: go version
+      - run: node --version
+      - run: pnpm --version
       - run: pnpm install --frozen-lockfile
+      - run: go build ./...
+        working-directory: apps/server
+      - run: go test ./...
+        working-directory: apps/server
+      - name: Verify disposable backup restore and historical-schema upgrade
+        run: pnpm compatibility:fixture
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l apps/server)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed on:"; echo "$unformatted"; exit 1
+          fi
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
-      - run: go test ./...
       - run: pnpm generate:api
       - run: pnpm generate:client
       - run: git diff --exit-code
+      - name: Verify baseline matches source
+        run: python3 scripts/check-baseline.py
+      - name: Verify Taskboard deployment metadata
+        run: node scripts/check-taskboard-config.mjs
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+        with:
+          version: v0.30.0
+      - name: Build both supported image platforms
+        run: docker buildx build --platform linux/amd64,linux/arm64 --output type=oci,dest=/tmp/taskboard-image.tar .
+      - name: Build runnable image
+        run: docker buildx build --platform linux/amd64 --load -t taskboard:ci .
+      - name: Run image and check health
+        run: |
+          set -euo pipefail
+          container="$(docker run -d -p 127.0.0.1:18090:8090 taskboard:ci)"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:18090/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs "$container"
+          exit 1

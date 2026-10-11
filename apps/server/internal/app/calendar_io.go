@@ -2,12 +2,14 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/andreasmolnardev/slopstack/go/ownership"
 	ical "github.com/emersion/go-ical"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
@@ -144,7 +146,15 @@ func saveImportedEventForDAV(app core.App, userID, calendarID string, component 
 	if davHref != "" {
 		record.Set("dav_href", davHref)
 	}
-	return app.Save(record)
+	action := "update"
+	if record.IsNew() {
+		action = "create"
+	}
+	if err := app.Save(record); err != nil {
+		return err
+	}
+	logAuditMutation(context.Background(), app, userID, action, "events", record.Id, "calendar-sync")
+	return nil
 }
 
 func saveImportedTodo(app core.App, userID, listID string, component *ical.Component) error {
@@ -226,12 +236,20 @@ func saveImportedTodoForTarget(app core.App, userID, targetField, targetID strin
 	if davHref != "" {
 		record.Set("dav_href", davHref)
 	}
-	return app.Save(record)
+	action := "update"
+	if record.IsNew() {
+		action = "create"
+	}
+	if err := app.Save(record); err != nil {
+		return err
+	}
+	logAuditMutation(context.Background(), app, userID, action, "todos", record.Id, "calendar-sync")
+	return nil
 }
 
 func validateImportCalendar(app core.App, userID, calendarID string) error {
 	calendar, err := app.FindRecordById("calendars", calendarID)
-	if err != nil || calendar.GetString("owner") != userID {
+	if err != nil || !ownership.IsOwner(calendar, "owner", userID) {
 		return fmt.Errorf("calendar not found")
 	}
 	return nil
@@ -239,7 +257,7 @@ func validateImportCalendar(app core.App, userID, calendarID string) error {
 
 func validateImportList(app core.App, userID, listID string) error {
 	list, err := app.FindRecordById("lists", listID)
-	if err != nil || list.GetString("owner") != userID {
+	if err != nil || !ownership.IsOwner(list, "owner", userID) {
 		return fmt.Errorf("list not found")
 	}
 	return nil
@@ -360,7 +378,7 @@ func exportCalendar(event *core.RequestEvent) error {
 		return event.UnauthorizedError("authentication required", nil)
 	}
 	calendar, err := event.App.FindRecordById("calendars", event.Request.PathValue("id"))
-	if err != nil || calendar.GetString("owner") != event.Auth.Id {
+	if err != nil || !ownership.IsOwner(calendar, "owner", event.Auth.Id) {
 		return event.NotFoundError("calendar not found", nil)
 	}
 	output, err := buildCalendarExport(event.App, event.Auth.Id, calendar.Id)

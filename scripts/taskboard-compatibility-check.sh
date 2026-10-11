@@ -49,4 +49,23 @@ if [ ! -s "$fixture_dir/pb_data/.backup-encryption-key" ]; then
 	exit 1
 fi
 
-printf 'Taskboard identity, build, and encrypted backup restore checks passed (%s)\n' "$archive"
+historical_data_dir="$fixture_dir/historical_pb_data"
+historical_archive=taskboard-20260915-populated.zip
+mkdir -p "$historical_data_dir/backups"
+cp "$repo_dir/apps/server/testdata/$historical_archive" "$historical_data_dir/backups/$historical_archive"
+
+historical_taskboard() {
+	TASKBOARD_STORAGE_PATH="$historical_data_dir" \
+	TASKBOARD_BACKUP_ENABLED=true \
+	TASKBOARD_BACKUP_S3_ENABLED=false \
+	TASKBOARD_PUBLIC_URL=http://localhost:8090 \
+	"$fixture_dir/taskboard" "$@"
+}
+
+historical_taskboard backup list | grep -Fq "$historical_archive"
+historical_taskboard backup restore "$historical_archive" --confirm
+TASKBOARD_COMPATIBILITY_DATA_DIR="$historical_data_dir" \
+	GOCACHE="$GOCACHE" \
+	go test ./apps/server -run '^TestCLIHistoricalRestorePreservesRecordsAndMigrations$' -count=1
+
+printf 'Taskboard identity, encrypted backup restore, and historical CLI migration checks passed (%s; %s)\n' "$archive" "$historical_archive"

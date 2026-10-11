@@ -18,3 +18,15 @@ IDs and values survive. The archive's migration IDs match the current app's
 migration set; this fixture proves historical-source boot/backup/restore
 compatibility, while `legacy_schema_compat_test.go` separately exercises a
 truncated migration-history upgrade.
+
+`taskboard-20260915-populated.zip` is a second synthetic archive built through
+the `20260915000000_add_todo_calendar.go` migration cutoff. It contains a
+synthetic user (`histuser0000001`) and task (`histtodo0000001`), but lacks the
+later `dav_data` fields and `carddav_changes` collection. The compatibility
+script restores this archive with the current Taskboard CLI, allows its normal
+process restart and migration path to run, then queries the resulting database
+without running app migrations a second time. It checks the records and the
+additive schema changes. `TestWriteCLIHistoricalRestoreFixture` can regenerate
+it by setting `TASKBOARD_WRITE_CLI_HISTORICAL_FIXTURE` to the output path.
+
+SHA-256: `b6aecb777388dbeff354b139fce97ab00ce7af891351ffa1430af9e6d9f4699c`.

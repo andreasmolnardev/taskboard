@@ -92,6 +92,37 @@ func TestHistoricalSourceBackupUpgradePreservesRecords(t *testing.T) {
 	})
 }
 
+// TestCLIHistoricalRestorePreservesRecordsAndMigrations inspects the existing
+// data directory after the compatibility script restored the old archive with
+// the current CLI. BaseApp bootstrap deliberately does not run app migrations,
+// so the assertions prove the CLI restart already applied them.
+func TestCLIHistoricalRestorePreservesRecordsAndMigrations(t *testing.T) {
+	dataDir := os.Getenv("TASKBOARD_COMPATIBILITY_DATA_DIR")
+	if dataDir == "" {
+		t.Skip("set TASKBOARD_COMPATIBILITY_DATA_DIR after running the CLI restore")
+	}
+	currentApp := core.NewBaseApp(core.BaseAppConfig{DataDir: dataDir})
+	if err := currentApp.Bootstrap(); err != nil {
+		t.Fatalf("open restored Taskboard data directory: %v", err)
+	}
+	defer func() { _ = currentApp.ResetBootstrapState() }()
+
+	assertHistoricalFixtureRecord(t, currentApp, "users", "histuser0000001", map[string]any{
+		"email": "historical-taskboard@example.invalid",
+	})
+	assertHistoricalFixtureRecord(t, currentApp, "todos", "histtodo0000001", map[string]any{
+		"owner":       "histuser0000001",
+		"title":       "Historical task",
+		"description": "Must survive current CLI restore and migrations",
+		"completed":   false,
+	})
+	assertFieldsAdded(t, currentApp, "todos", "dav_data")
+	assertFieldsAdded(t, currentApp, "events", "dav_data")
+	if _, err := currentApp.FindCollectionByNameOrId("carddav_changes"); err != nil {
+		t.Fatalf("current CLI restore did not apply the additive CardDAV journal migration: %v", err)
+	}
+}
+
 func assertHistoricalFixtureRecord(t *testing.T, testApp core.App, collectionName, recordID string, fields map[string]any) {
 	t.Helper()
 	record, err := testApp.FindRecordById(collectionName, recordID)

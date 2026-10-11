@@ -155,6 +155,87 @@ func TestHistoricalTaskboardBackupUpgradePreservesRecords(t *testing.T) {
 	}
 }
 
+// TestWriteCLIHistoricalRestoreFixture recreates the checked-in, fully
+// synthetic archive from the historical migration cutoff. Set the output path
+// only when intentionally regenerating that fixture.
+func TestWriteCLIHistoricalRestoreFixture(t *testing.T) {
+	outputPath := os.Getenv("TASKBOARD_WRITE_CLI_HISTORICAL_FIXTURE")
+	if outputPath == "" {
+		t.Skip("set TASKBOARD_WRITE_CLI_HISTORICAL_FIXTURE to write the synthetic archive")
+	}
+	testApp := newTestAppThroughMigration(t, "20260915000000_add_todo_calendar.go")
+	defer testApp.Cleanup()
+	removeFieldForHistoricalFixture(t, testApp, "todos", "dav_data")
+	removeFieldForHistoricalFixture(t, testApp, "events", "dav_data")
+	if collection, err := testApp.FindCollectionByNameOrId("carddav_changes"); err == nil {
+		if err := testApp.Delete(collection); err != nil {
+			t.Fatalf("remove post-cutoff CardDAV journal: %v", err)
+		}
+	}
+	assertFieldAbsent(t, testApp, "todos", "dav_data")
+	assertFieldAbsent(t, testApp, "events", "dav_data")
+	if _, err := testApp.FindCollectionByNameOrId("carddav_changes"); err == nil {
+		t.Fatal("synthetic CLI restore fixture unexpectedly has the post-cutoff CardDAV journal")
+	}
+
+	users, err := testApp.FindCollectionByNameOrId("users")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := core.NewRecord(users)
+	user.Id = "histuser0000001"
+	user.SetEmail("historical-taskboard@example.invalid")
+	user.SetPassword("fixture-password-123456")
+	if err := testApp.Save(user); err != nil {
+		t.Fatalf("save synthetic historical user: %v", err)
+	}
+	todos, err := testApp.FindCollectionByNameOrId("todos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	todo := core.NewRecord(todos)
+	todo.Id = "histtodo0000001"
+	todo.Set("owner", user.Id)
+	todo.Set("title", "Historical task")
+	todo.Set("description", "Must survive current CLI restore and migrations")
+	todo.Set("completed", false)
+	if err := testApp.Save(todo); err != nil {
+		t.Fatalf("save synthetic historical task: %v", err)
+	}
+
+	const archiveName = "taskboard-20260915-populated.zip"
+	if err := testApp.CreateBackup(context.Background(), archiveName); err != nil {
+		t.Fatalf("create synthetic historical archive: %v", err)
+	}
+	backupsFS, err := testApp.NewBackupsFilesystem()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := backupsFS.GetReader(archiveName)
+	if err != nil {
+		_ = backupsFS.Close()
+		t.Fatalf("open synthetic historical archive: %v", err)
+	}
+	archiveBytes, readErr := io.ReadAll(reader)
+	readerErr := reader.Close()
+	fsErr := backupsFS.Close()
+	if readErr != nil {
+		t.Fatalf("read synthetic historical archive: %v", readErr)
+	}
+	if readerErr != nil {
+		t.Fatalf("close synthetic historical archive reader: %v", readerErr)
+	}
+	if fsErr != nil {
+		t.Fatalf("close synthetic historical backups filesystem: %v", fsErr)
+	}
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(outputPath, archiveBytes, 0o644); err != nil {
+		t.Fatalf("write synthetic historical archive: %v", err)
+	}
+}
+
 func runCurrentTaskboardBootstrap(testApp core.App) error {
 	if err := app.EnsureCollections(testApp); err != nil {
 		return err

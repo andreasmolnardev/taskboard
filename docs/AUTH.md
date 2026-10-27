@@ -26,3 +26,9 @@ The admin console at `/admin/users` manages users through PocketBase's superuser
 ## Backend pattern
 
 Protected routes must reject missing `event.Auth` and apply `Authorize` for permission checks. Frontend navigation and conditional rendering are not security controls.
+
+## Account data controls
+
+Signed-in users can download their account data from Settings. The export omits passwords, auth tokens, and hidden app-password hashes. Users can also permanently delete their account after typing their account email to confirm. The API scopes both actions to the authenticated user; account deletion removes owned records in a database transaction.
+
+See [API account data](API.md#account-data) for endpoint details and [Deployment upgrades and rollback](DEPLOYMENT.md#upgrades-and-rollback) for release and migration recovery steps.

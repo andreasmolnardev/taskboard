@@ -28,6 +28,18 @@ Unauthenticated requests return `401`.
 
 Both endpoints require a PocketBase bearer token.
 
+## Account data
+
+`GET /api/account/export` downloads a JSON export containing the signed-in user's profile and owned app data, including tasks, events, lists, calendars, contacts, reminders, notifications, sync state, and app-password metadata. Secret hashes and auth credentials are not exported. The response is private and marked `no-store`.
+
+`POST /api/account/delete` permanently deletes the signed-in account and its owned records in one transaction. It requires a PocketBase bearer token and a JSON body with `confirmEmail` matching the current account email:
+
+```json
+{"confirmEmail":"you@example.com"}
+```
+
+It returns `204 No Content` on success. Export important data before deletion; deletion cannot be undone except by restoring a server backup.
+
 ## Extending a module
 
 1. Define request and response types in the Go module.

@@ -74,3 +74,35 @@ The drill needs Docker access and enough temporary disk space for the restored d
 ## Frontend
 
 The frontend is a static Vite build. Keep `/api` proxied to the Go runtime or set `VITE_API_URL` to the deployed API origin.
+
+## Upgrades and rollback
+
+Use a tagged release or a pinned image digest. Avoid deploying `latest`, so the exact prior app build is known. Run one app instance while PocketBase migrations run; do not start a new release beside the old instance against the same data directory.
+
+Before each release:
+
+1. Read the release notes and check for required configuration or manual steps.
+2. Confirm the latest off-host backup is present. Create a manual backup with `slopstack backup create` and record the exact archive name.
+3. Record the currently deployed release tag or image digest. Plan a maintenance window if the release changes schema or causes downtime.
+4. Stop new traffic, then stop the app before replacing its image or binary.
+
+For a source checkout using this repository's Compose file, build the release while the current service is still running, then stop and replace it:
+
+```sh
+git checkout <release-tag>
+docker compose build slopstack
+docker compose stop slopstack
+docker compose up -d --no-deps slopstack
+```
+
+PocketBase applies registered migrations during startup. Watch startup logs until migrations finish, then check the health endpoint and sign in. Smoke test create, edit, delete, search, import/export, and any CalDAV or CardDAV clients you use before reopening traffic.
+
+### Roll back
+
+First stop traffic and stop the app. If the migration was explicitly designed to keep the prior release compatible, redeploy the recorded prior image and start one instance. Check the health endpoint and verify data before reopening traffic.
+
+For a source checkout, use the same Compose steps with the recorded prior release tag.
+
+If the prior release cannot use the new schema, restore the pre-upgrade backup instead of trying to reverse an applied migration. Keep the app stopped, select the exact archive recorded before the upgrade, and use the documented `slopstack backup restore <archive> --confirm` CLI. Then deploy the prior app release and start it once. Restoring replaces current data, including writes made after that backup. Test the restore on an isolated copy first when possible.
+
+Treat migrations as forward-only in production: never edit an applied migration or assume its down function is a safe release rollback. Add a new migration for later schema changes. Keep the app release, migration code, and backup archive together in the release notes so the operator can identify a compatible rollback path.

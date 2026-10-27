@@ -1236,6 +1236,23 @@ kbd {
   color: var(--foreground);
   transform: translateX(2px);
 }
+.account-action-danger strong,
+.account-action-danger svg {
+  color: #b42318;
+}
+.dark .account-action-danger strong,
+.dark .account-action-danger svg {
+  color: #f28b82;
+}
+.button-destructive {
+  color: #fff;
+  background: #b42318;
+  border-color: #b42318;
+}
+.button-destructive:hover {
+  background: #912018;
+  border-color: #912018;
+}
 .account-sso {
   display: flex;
   flex-direction: column;

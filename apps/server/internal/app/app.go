@@ -182,6 +182,7 @@ func registerRoutes(e *core.ServeEvent, config Config, api huma.API) {
 	registerCalendarIORoutes(e)
 	registerOccurrenceRoutes(e)
 	registerNotificationRoutes(e)
+	registerAccountRoutes(e)
 	registerCalDAVRoutes(e)
 	registerCardDAVRoutes(e)
 	registerSearchRoutes(e)

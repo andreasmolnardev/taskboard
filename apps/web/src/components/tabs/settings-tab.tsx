@@ -3,6 +3,7 @@ import {
   CalendarDays,
   ChevronRight,
   Database,
+  Download,
   Monitor,
   Moon,
   Palette,
@@ -35,7 +36,7 @@ import {
 } from '../../data';
 
 type SettingsSection = 'appearance' | 'account' | 'calendar' | 'dev';
-type AccountModal = 'email' | 'password' | null;
+type AccountModal = 'email' | 'password' | 'delete' | null;
 type SsoProvider = { name: string; displayName: string };
 type LinkedSsoAccount = { id: string; provider: string };
 const settingsSections: SettingsSection[] = import.meta.env.DEV
@@ -79,6 +80,9 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [accountModal, setAccountModal] = useState<AccountModal>(null);
   const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
   const [linkedSsoAccounts, setLinkedSsoAccounts] = useState<LinkedSsoAccount[]>([]);
@@ -239,6 +243,52 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       );
     } finally {
       setEmailBusy(false);
+    }
+  };
+
+  const exportAccount = async () => {
+    try {
+      const response = await apiFetch('/api/account/export', {
+        headers: { Authorization: `Bearer ${pb.authStore.token}` },
+      });
+      if (!response.ok) throw new Error();
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'taskboard-account-export.json';
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setDeleteError('Could not export account data. Try again.');
+    }
+  };
+
+  const deleteAccount = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setDeleteBusy(true);
+    setDeleteError('');
+    try {
+      const response = await apiFetch('/api/account/delete', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${pb.authStore.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ confirmEmail: deleteConfirmation }),
+      });
+      if (!response.ok) throw new Error();
+      const userId = pb.authStore.record?.id;
+      if (userId) {
+        localStorage.removeItem(`taskboard-accent-${userId}`);
+        localStorage.removeItem(`taskboard-font-size-${userId}`);
+        localStorage.removeItem(`taskboard-hidden-containers-${userId}`);
+      }
+      pb.authStore.clear();
+      window.location.assign('/auth/login');
+    } catch {
+      setDeleteError('Could not delete the account. Check the email and try again.');
+      setDeleteBusy(false);
     }
   };
 
@@ -737,6 +787,37 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 </span>
                 <ChevronRight size={18} aria-hidden="true" />
               </button>
+              <button
+                className="account-action"
+                type="button"
+                onClick={() => void exportAccount()}
+              >
+                <span>
+                  <strong>Export account data</strong>
+                  <small>Download your tasks, events, contacts, and account data as JSON.</small>
+                </span>
+                <Download size={18} aria-hidden="true" />
+              </button>
+              <button
+                className="account-action account-action-danger"
+                type="button"
+                onClick={() => {
+                  setDeleteError('');
+                  setDeleteConfirmation('');
+                  setAccountModal('delete');
+                }}
+              >
+                <span>
+                  <strong>Delete account</strong>
+                  <small>Permanently remove your account and its data.</small>
+                </span>
+                <Trash2 size={18} aria-hidden="true" />
+              </button>
+              {deleteError && accountModal !== 'delete' && (
+                <p className="form-error" role="alert">
+                  {deleteError}
+                </p>
+              )}
             </div>
             {ssoProviders.length > 0 && (
               <div className="account-sso">
@@ -1016,12 +1097,18 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
             <div className="composer-header">
               <div>
                 <h2 id="account-modal-title">
-                  {accountModal === 'email' ? 'Change email' : 'Change password'}
+                  {accountModal === 'email'
+                    ? 'Change email'
+                    : accountModal === 'password'
+                      ? 'Change password'
+                      : 'Delete account'}
                 </h2>
                 <p className="modal-subtitle">
                   {accountModal === 'email'
                     ? 'We will send a confirmation link to your new address.'
-                    : 'Use a password you do not use anywhere else.'}
+                    : accountModal === 'password'
+                      ? 'Use a password you do not use anywhere else.'
+                      : 'This permanently deletes your account and all app data. This cannot be undone.'}
                 </p>
               </div>
               <button
@@ -1059,7 +1146,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   {emailBusy ? 'Sending…' : 'Change email'}
                 </button>
               </form>
-            ) : (
+            ) : accountModal === 'password' ? (
               <form className="account-form" onSubmit={(event) => void changePassword(event)}>
                 <label>
                   Current password
@@ -1105,6 +1192,27 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 )}
                 <button className="button button-primary" disabled={passwordBusy}>
                   {passwordBusy ? 'Changing…' : 'Change password'}
+                </button>
+              </form>
+            ) : (
+              <form className="account-form" onSubmit={(event) => void deleteAccount(event)}>
+                <label>
+                  Type your account email to confirm
+                  <input
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={deleteConfirmation}
+                    onChange={(event) => setDeleteConfirmation(event.target.value)}
+                  />
+                </label>
+                {deleteError && (
+                  <p className="form-error" role="alert">
+                    {deleteError}
+                  </p>
+                )}
+                <button className="button button-destructive" disabled={deleteBusy}>
+                  {deleteBusy ? 'Deleting…' : 'Delete account and data'}
                 </button>
               </form>
             )}

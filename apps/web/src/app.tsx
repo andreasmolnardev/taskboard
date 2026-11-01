@@ -3,16 +3,15 @@ import { Plus } from 'lucide-react';
 import type { RecordModel } from 'pocketbase';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useTheme } from 'next-themes';
-import { Sidebar, type SidebarTab } from './components/sidebar';
+import type { SidebarTab } from './components/sidebar';
+import { taskboardAuth, taskboardShell } from './application';
+import { renderView, resolveView, runAction, useAuthentication } from './lib/slopstack';
+import { TaskboardViewsProvider } from './views/taskboard-views';
+import { createTaskAction, taskboardApplication } from './application';
 import { apiFetch } from './api/client';
 import { pb } from './api/pocketbase';
 import { accentColors, entries, fontSizes, getActiveContainers, lists, type Entry } from './data';
-import { CalendarTab } from './components/tabs/calendar-tab';
-import { ListsTab } from './components/tabs/lists-tab';
 import { SearchTab } from './components/tabs/search-tab';
-import { SettingsTab } from './components/tabs/settings-tab';
-import { UpcomingTab } from './components/tabs/upcoming-tab';
-import { PeopleTab } from './components/tabs/people-tab';
 import { AuthScreen } from './components/app/auth-screen';
 import { CreateComposer } from './components/app/create-composer';
 import { NotificationsPopover } from './components/app/notifications-popover';
@@ -59,33 +58,21 @@ function recordHasRecurrence(record: RecordModel) {
 }
 
 export function App() {
-  const [authenticated, setAuthenticated] = useState(pb.authStore.isValid);
-  const [authUserId, setAuthUserId] = useState(pb.authStore.record?.id ?? '');
+  const auth = useAuthentication(taskboardAuth);
+  const authenticated = Boolean(auth.session);
+  const authUserId = auth.session?.user.id ?? '';
+  const ShellComponent = taskboardShell.component;
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const calendarSearch = useRouterState({ select: (state) => state.location.search });
-  const requestedCalendarMonth =
-    typeof calendarSearch.month === 'string' ? calendarSearch.month : undefined;
-  const activeTab: SidebarTab =
-    pathname === '/calendar'
-      ? 'calendar'
-      : pathname === '/lists'
-        ? 'lists'
-        : pathname === '/people'
-          ? 'people'
-          : pathname === '/search'
-            ? 'search'
-            : pathname === '/settings'
-              ? 'settings'
-              : 'upcoming';
+  const activeView = resolveView(taskboardApplication.views ?? [], pathname)?.view;
+  const activeTab = (activeView?.id ?? 'upcoming') as SidebarTab;
   const [composerOpen, setComposerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationsClosing, setNotificationsClosing] = useState(false);
-  const [notificationCount, setNotificationCount] = useState(0);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const [createType, setCreateType] = useState('task');
-  const [createColor, setCreateColor] = useState(accentColors[0].value);
+  const createColor = accentColors[0].value;
   const [listOnlyComposer, setListOnlyComposer] = useState(false);
   const [taskEventOnlyComposer, setTaskEventOnlyComposer] = useState(false);
   const [editingEntry, setEditingEntry] = useState<import('./data').Entry | null>(null);
@@ -94,7 +81,7 @@ export function App() {
   const [, setDataVersion] = useState(0);
   const loadVersion = useRef(0);
   const knownUserId = useRef(pb.authStore.record?.id ?? '');
-  const { resolvedTheme, setTheme } = useTheme();
+  const { setTheme } = useTheme();
   useEffect(() => {
     const applyStoredTheme = () => {
       const customTheme = readCustomTheme();
@@ -144,25 +131,43 @@ export function App() {
     if (authenticated && isAuthRoute) void navigate({ to: '/', replace: true });
   }, [authenticated, navigate, pathname]);
   useEffect(() => {
-    return pb.authStore.onChange((_token, record) => {
-      const nextUserId = record?.id ?? '';
-      const userChanged = nextUserId !== knownUserId.current;
-      knownUserId.current = nextUserId;
-      if (userChanged) {
-        loadVersion.current += 1;
-        entries.splice(0, entries.length);
-        lists.splice(0, lists.length);
-        setDataVersion((version) => version + 1);
-        setNotificationCount(0);
-        setDataError('');
-        setComposerOpen(false);
-        setEditingEntry(null);
-        setListOnlyComposer(false);
-        setTaskEventOnlyComposer(false);
-        setAuthUserId(nextUserId);
-      }
-      setAuthenticated(Boolean(record));
-    });
+    void taskboardAuth.initialize();
+    return () => taskboardAuth.dispose();
+  }, []);
+  useEffect(() => {
+    const nextUserId = authUserId;
+    if (nextUserId === knownUserId.current) return;
+    knownUserId.current = nextUserId;
+    loadVersion.current += 1;
+    window.dispatchEvent(new CustomEvent('taskboard-notification-count', { detail: 0 }));
+    entries.splice(0, entries.length);
+    lists.splice(0, lists.length);
+    setDataVersion((version) => version + 1);
+    setDataError('');
+    setComposerOpen(false);
+    setEditingEntry(null);
+    setListOnlyComposer(false);
+    setTaskEventOnlyComposer(false);
+  }, [authUserId]);
+  useEffect(() => {
+    const openCreate = (event: Event) => {
+      const type = (event as CustomEvent<{ type?: string }>).detail?.type ?? 'task';
+      setEditingEntry(null);
+      setCreateType(type);
+      setListOnlyComposer(false);
+      setTaskEventOnlyComposer(false);
+      setComposerOpen(true);
+    };
+    window.addEventListener('taskboard-create', openCreate);
+    const openNotifications = () => {
+      setNotificationsClosing(false);
+      setNotificationsOpen(true);
+    };
+    window.addEventListener('taskboard-open-notifications', openNotifications);
+    return () => {
+      window.removeEventListener('taskboard-create', openCreate);
+      window.removeEventListener('taskboard-open-notifications', openNotifications);
+    };
   }, []);
   useEffect(() => {
     if (!authenticated || !authUserId) return;
@@ -375,106 +380,63 @@ export function App() {
   }, [authenticated, authUserId, refreshKey]);
 
   const openCreateComposer = () => {
-    setEditingEntry(null);
-    setCreateType('task');
-    setListOnlyComposer(false);
-    setTaskEventOnlyComposer(false);
-    setComposerOpen(true);
+    void runAction(createTaskAction, undefined, {
+      navigate: (to) => {
+        void navigate({ to });
+      },
+      authorize: () => authenticated,
+      confirm: () => true,
+      notify: () => undefined,
+    });
   };
 
   if (!authenticated)
     return <AuthScreen mode={pathname === '/auth/register' ? 'register' : 'login'} />;
-  const content =
-    activeTab === 'calendar' ? (
-      <CalendarTab
-        key={requestedCalendarMonth ?? 'today'}
-        initialMonth={requestedCalendarMonth}
-        onEdit={(entry) => {
-          setEditingEntry(entry);
-          setCreateType(entry.type);
-          setListOnlyComposer(false);
-          setTaskEventOnlyComposer(true);
-          setComposerOpen(true);
-        }}
-        onDayClick={() => {
-          setEditingEntry(null);
-          setCreateType('task');
-          setListOnlyComposer(false);
-          setTaskEventOnlyComposer(true);
-          setComposerOpen(true);
-        }}
-      />
-    ) : activeTab === 'lists' ? (
-      <ListsTab
-        onChanged={() => setRefreshKey((key) => key + 1)}
-        onEdit={(entry) => {
-          setEditingEntry(entry);
-          setCreateType(entry.type);
-          setListOnlyComposer(false);
-          setTaskEventOnlyComposer(true);
-          setComposerOpen(true);
-        }}
-        onAdd={() => {
-          setEditingEntry(null);
-          setCreateType('list');
-          setListOnlyComposer(true);
-          setTaskEventOnlyComposer(false);
-          setComposerOpen(true);
-        }}
-      />
-    ) : activeTab === 'people' ? (
-      <PeopleTab />
-    ) : activeTab === 'settings' ? (
-      <SettingsTab onChanged={() => setRefreshKey((key) => key + 1)} />
-    ) : (
-      <UpcomingTab
-        onChanged={() => setRefreshKey((key) => key + 1)}
-        onEdit={(entry) => {
-          setEditingEntry(entry);
-          setCreateType(entry.type);
-          setListOnlyComposer(false);
-          setTaskEventOnlyComposer(true);
-          setComposerOpen(true);
-        }}
-        onOpenMonth={(year, month) => {
-          void navigate({
-            to: '/calendar',
-            search: { month: `${year}-${String(month + 1).padStart(2, '0')}` },
-          });
-        }}
-      />
-    );
+  const editEntry = (entry: import('./data').Entry) => {
+    setEditingEntry(entry);
+    setCreateType(entry.type);
+    setListOnlyComposer(false);
+    setTaskEventOnlyComposer(true);
+    setComposerOpen(true);
+  };
+  const bindings = {
+    onChanged: () => setRefreshKey((key) => key + 1),
+    onEdit: editEntry,
+    onAddList: () => {
+      setEditingEntry(null);
+      setCreateType('list');
+      setListOnlyComposer(true);
+      setTaskEventOnlyComposer(false);
+      setComposerOpen(true);
+    },
+    onOpenMonth: (year: number, month: number) => {
+      void navigate({
+        to: '/calendar',
+        search: { month: `${year}-${String(month + 1).padStart(2, '0')}` },
+      });
+    },
+    onOpenDay: () => {
+      setEditingEntry(null);
+      setCreateType('task');
+      setListOnlyComposer(false);
+      setTaskEventOnlyComposer(true);
+      setComposerOpen(true);
+    },
+  };
+  const content = activeView ? (
+    <TaskboardViewsProvider value={bindings}>
+      {renderView(activeView, {
+        params: {},
+        search: new URLSearchParams(window.location.search),
+        navigate: (to) => {
+          window.history.pushState({}, '', to);
+        },
+      })}
+    </TaskboardViewsProvider>
+  ) : null;
 
   return (
-    <div className={`app-shell ${resolvedTheme === 'dark' ? 'dark' : ''}`}>
-      <Sidebar
-        activeTab={activeTab}
-        onChange={(tab) => {
-          if (tab === 'notifications') {
-            setNotificationsClosing(false);
-            setNotificationsOpen(true);
-          } else if (tab === 'upcoming') {
-            closeNotifications();
-            void navigate({ to: '/' });
-          } else if (tab === 'calendar') {
-            closeNotifications();
-            void navigate({ to: '/calendar', search: { month: undefined } });
-          } else if (tab === 'lists') {
-            closeNotifications();
-            void navigate({ to: '/lists' });
-          } else if (tab === 'people') {
-            closeNotifications();
-            void navigate({ to: '/people' });
-          } else if (tab === 'search') {
-            closeNotifications();
-            setSearchOpen(true);
-          } else {
-            closeNotifications();
-            void navigate({ to: '/settings' });
-          }
-        }}
-        notificationCount={notificationCount}
-      />
+    <ShellComponent>
       <main className="main-content">
         {dataError && (
           <p className="form-error app-error" role="alert">
@@ -514,7 +476,11 @@ export function App() {
             void navigate({ to: '/people' });
             setSearchOpen(false);
           } else if (result.type === 'list' || result.type === 'calendar') {
-            void navigate({ to: result.type === 'calendar' ? '/settings' : '/lists' });
+            void navigate(
+              result.type === 'calendar'
+                ? { to: '/calendar', search: { month: undefined } }
+                : { to: '/lists' },
+            );
             setSearchOpen(false);
           }
         }}
@@ -525,7 +491,9 @@ export function App() {
           open={notificationsOpen}
           closing={notificationsClosing}
           onClose={closeNotifications}
-          onCountChange={setNotificationCount}
+          onCountChange={(count) =>
+            window.dispatchEvent(new CustomEvent('taskboard-notification-count', { detail: count }))
+          }
           onAnimationEnd={(event) => {
             if (event.target === event.currentTarget && notificationsClosing) {
               setNotificationsOpen(false);
@@ -542,7 +510,6 @@ export function App() {
         color={createColor}
         editing={editingEntry}
         onTypeChange={setCreateType}
-        onColorChange={setCreateColor}
         onClose={() => {
           setComposerOpen(false);
           setEditingEntry(null);
@@ -556,6 +523,6 @@ export function App() {
           setRefreshKey((key) => key + 1);
         }}
       />
-    </div>
+    </ShellComponent>
   );
 }

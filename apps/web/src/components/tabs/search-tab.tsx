@@ -10,7 +10,8 @@ import {
 } from '../ui/command';
 import { apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
-import { entries } from '../../data';
+import { entries, lists } from '../../data';
+import { taskboardSearchProvider } from '../../application';
 
 type DeepResult = {
   id: string;
@@ -34,6 +35,39 @@ export function SearchTab({
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<'local' | 'deep'>('local');
   const [deepResults, setDeepResults] = useState<DeepResult[]>([]);
+  const [localResults, setLocalResults] = useState<DeepResult[]>([]);
+
+  useEffect(() => {
+    if (mode !== 'local') return;
+    const queryText = query.trim();
+    if (!queryText) {
+      setLocalResults([]);
+      return;
+    }
+    const controller = new AbortController();
+    void taskboardSearchProvider.search(queryText, controller.signal).then((matches) => {
+      if (controller.signal.aborted) return;
+      setLocalResults(
+        matches.map((match) => {
+          const entry = entries.find((item) => item.id === match.id);
+          const container = lists.find((item) => item.id === match.id);
+          return {
+            id: match.id,
+            type:
+              entry?.type === 'task'
+                ? 'todo'
+                : entry?.type === 'event'
+                  ? 'event'
+                  : (container?.kind ?? 'list'),
+            title: match.title,
+            description: match.description,
+            container: entry?.list,
+          };
+        }),
+      );
+    });
+    return () => controller.abort();
+  }, [mode, query]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -71,16 +105,7 @@ export function SearchTab({
     };
   }, [mode, query]);
 
-  const results =
-    mode === 'local'
-      ? entries.map((entry) => ({
-          id: entry.id,
-          type: entry.type === 'task' ? ('todo' as const) : ('event' as const),
-          title: entry.title,
-          description: entry.description,
-          container: entry.list,
-        }))
-      : deepResults;
+  const results = mode === 'local' ? localResults : deepResults;
   return (
     <CommandDialog
       open={open}

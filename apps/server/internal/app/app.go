@@ -36,6 +36,9 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 		if err := EnsureCalDAVChanges(e.App); err != nil {
 			return err
 		}
+		if err := EnsureCalDAVImports(e.App); err != nil {
+			return err
+		}
 		if err := EnsureOfflineSync(e.App); err != nil {
 			return err
 		}

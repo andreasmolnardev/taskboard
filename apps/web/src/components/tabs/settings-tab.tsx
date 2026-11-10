@@ -94,6 +94,9 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [importedCalendars, setImportedCalendars] = useState<string[]>([]);
   const [calendarIOError, setCalendarIOError] = useState('');
   const [calendarIOBusy, setCalendarIOBusy] = useState(false);
+  const [calDavSource, setCalDavSource] = useState('');
+  const [calDavUsername, setCalDavUsername] = useState('');
+  const [calDavPassword, setCalDavPassword] = useState('');
   const [weekStart, setWeekStart] = useState<WeekStart>(getWeekStart);
   const [appPasswords, setAppPasswords] = useState<{ id: string; name: string }[]>([]);
   const [newPasswordName, setNewPasswordName] = useState('CalDAV');
@@ -415,6 +418,30 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       onChanged?.();
     } catch (error) {
       setCalendarIOError(error instanceof Error ? error.message : 'Could not import calendar.');
+    } finally {
+      setCalendarIOBusy(false);
+    }
+  };
+
+  const handleCalDavImport = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const calendar = getActiveContainers(lists).find((container) => container.kind === 'calendar');
+    if (!calendar) return;
+    setCalendarIOBusy(true);
+    setCalendarIOError('');
+    try {
+      const response = await apiFetch('/api/calendars/import-caldav', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${pb.authStore.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: calDavSource, username: calDavUsername, password: calDavPassword, calendar: calendar.id }),
+      });
+      const result = await response.json() as { imported?: number; message?: string };
+      if (!response.ok) throw new Error(result.message ?? 'Could not import from that CalDAV server.');
+      setImportedCalendars((current) => [`CalDAV: ${result.imported ?? 0} events`, ...current]);
+      setCalDavPassword('');
+      onChanged?.();
+    } catch (error) {
+      setCalendarIOError(error instanceof Error ? error.message : 'Could not import from CalDAV.');
     } finally {
       setCalendarIOBusy(false);
     }
@@ -981,6 +1008,15 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                     </button>
                   ))}
               </div>
+            </div>
+            <div className="settings-section calendar-settings">
+              <div><h2>Import from CalDAV</h2><p>Copy events once from a CalDAV calendar URL. This cannot be repeated.</p></div>
+              <form onSubmit={(event) => void handleCalDavImport(event)} className="calendar-import-form">
+                <label>CalDAV calendar URL<input type="url" required value={calDavSource} onChange={(event) => setCalDavSource(event.target.value)} placeholder="https://calendar.example/dav/" /></label>
+                <label>Username<input autoComplete="username" value={calDavUsername} onChange={(event) => setCalDavUsername(event.target.value)} /></label>
+                <label>Password<input type="password" autoComplete="current-password" value={calDavPassword} onChange={(event) => setCalDavPassword(event.target.value)} /></label>
+                <button className="button button-quiet" type="submit" disabled={calendarIOBusy}>{calendarIOBusy ? 'Importing…' : 'Import once'}</button>
+              </form>
             </div>
             <div className="settings-section calendar-sync-settings">
               <div>

@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint src",
     "test": "vitest run --passWithNoTests",
-    "generate:client": "openapi-ts -i ../../openapi/openapi.json -o src/api/generated"
+    "generate:client": "openapi-ts -i ../../openapi/openapi.json -o src/api/generated",
+    "test:browser": "pnpm build && playwright test"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -37,10 +38,12 @@
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.88.0",
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/vite": "^4.1.18",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "fake-indexeddb": "^6.2.8",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",

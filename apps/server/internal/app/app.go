@@ -16,6 +16,7 @@ import (
 
 func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 	registerTodoAPI(api)
+	registerOfflineSyncAPI(api)
 	pb.RootCmd.PersistentFlags().StringVar(&config.HTTPAddress, "http", config.HTTPAddress, "HTTP address")
 	pb.OnBootstrap().BindFunc(func(e *core.BootstrapEvent) error {
 		if err := e.Next(); err != nil {
@@ -35,11 +36,15 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 		if err := EnsureCalDAVChanges(e.App); err != nil {
 			return err
 		}
+		if err := EnsureOfflineSync(e.App); err != nil {
+			return err
+		}
 		return applyBackupConfig(e.App, config)
 	})
 	protectUserAdminFlag(pb, config)
 	registerOwnershipHooks(pb)
 	registerCalDAVChangeHooks(pb)
+	registerOfflineSyncHooks(pb)
 	registerReminderScheduler(pb)
 	pb.OnRecordAfterCreateSuccess("users").BindFunc(func(e *core.RecordEvent) error {
 		if err := provisionDefaultContainers(e.App, e.Record.Id); err != nil {
@@ -186,7 +191,9 @@ func registerRoutes(e *core.ServeEvent, config Config, api huma.API) {
 	registerCalDAVRoutes(e)
 	registerCardDAVRoutes(e)
 	registerSearchRoutes(e)
+	registerOfflineSyncRoutes(e)
 	registerTodoRoutes(e, config)
+	registerWebRoutes(e, config)
 }
 
 func registerAuthRoutes(e *core.ServeEvent, config Config) {

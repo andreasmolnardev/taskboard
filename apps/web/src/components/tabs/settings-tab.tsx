@@ -1,4 +1,5 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { offlineCollection } from '../../offline';
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   CalendarDays,
   ChevronRight,
@@ -23,6 +24,8 @@ import {
   type CustomTheme,
 } from '../../theme';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
+import { createSettingsStore, useSettings } from '../../lib/slopstack';
+import { taskboardSettings } from '../../application';
 import { ContainerManager, type ManagedContainer } from '../container-manager';
 import {
   accentColors,
@@ -46,6 +49,33 @@ const settingsSections: SettingsSection[] = import.meta.env.DEV
 export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const { theme, setTheme } = useTheme();
   const userId = pb.authStore.record?.id ?? 'anonymous';
+  const settingsStore = useMemo(
+    () =>
+      createSettingsStore(taskboardSettings, {
+        async load() {
+          return {
+            weekStart: getWeekStart(),
+            accentColor:
+              localStorage.getItem(`taskboard-accent-${userId}`) ?? accentColors[0].value,
+            fontSize: fontSizes.some(
+              (option) => option.value === localStorage.getItem(`taskboard-font-size-${userId}`),
+            )
+              ? (localStorage.getItem(`taskboard-font-size-${userId}`) as FontSize)
+              : 'medium',
+          };
+        },
+        async save(value) {
+          localStorage.setItem(weekStartStorageKey, String(value.weekStart));
+          localStorage.setItem(`taskboard-accent-${userId}`, String(value.accentColor));
+          localStorage.setItem(`taskboard-font-size-${userId}`, String(value.fontSize));
+        },
+      }),
+    [userId],
+  );
+  const settingsSnapshot = useSettings(settingsStore);
+  useEffect(() => {
+    void settingsStore.load();
+  }, [settingsStore]);
   const accentStorageKey = `taskboard-accent-${userId}`;
   const fontSizeStorageKey = `taskboard-font-size-${userId}`;
   const [accentColor, setAccentColor] = useState(
@@ -101,6 +131,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     }
   });
   const carddavBaseUrl = `${apiBaseUrl}/carddav`;
+  const caldavBaseUrl = `${apiBaseUrl}/caldav/`;
 
   useEffect(() => {
     const updateCustomTheme = () => setCustomTheme(readCustomTheme());
@@ -397,9 +428,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     container: ManagedContainer,
     changes: Pick<ManagedContainer, 'name' | 'color' | 'description'>,
   ) => {
-    await pb
-      .collection(container.kind === 'list' ? 'lists' : 'calendars')
-      .update(container.id, changes);
+    await offlineCollection(container.kind === 'list' ? 'lists' : 'calendars').update(
+      container.id,
+      changes,
+    );
     onChanged?.();
   };
   const setContainerVisible = (_container: ManagedContainer, visible: boolean) => {
@@ -411,9 +443,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     onChanged?.();
   };
   const setContainerArchived = async (container: ManagedContainer, archived: boolean) => {
-    await pb
-      .collection(container.kind === 'list' ? 'lists' : 'calendars')
-      .update(container.id, { archived });
+    await offlineCollection(container.kind === 'list' ? 'lists' : 'calendars').update(
+      container.id,
+      { archived },
+    );
     const next = archived
       ? [...new Set([...hiddenContainerIds, container.id])]
       : hiddenContainerIds.filter((id) => id !== container.id);
@@ -426,7 +459,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       await setContainerArchived(container, true);
       return;
     }
-    await pb.collection(container.kind === 'list' ? 'lists' : 'calendars').delete(container.id);
+    await offlineCollection(container.kind === 'list' ? 'lists' : 'calendars').delete(container.id);
     onChanged?.();
   };
 
@@ -601,7 +634,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
 
   return (
     <>
-      <header className="page-header">
+      <header
+        className="page-header"
+        aria-busy={settingsSnapshot.status === 'loading' || settingsSnapshot.status === 'saving'}
+      >
         <h1>Settings</h1>
       </header>
       <Tabs
@@ -712,7 +748,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   <button
                     key={option.value}
                     className={fontSize === option.value ? 'active' : ''}
-                    onClick={() => setFontSize(option.value)}
+                    onClick={() => {
+                      setFontSize(option.value);
+                      void settingsStore.update({ fontSize: option.value });
+                    }}
                     aria-pressed={fontSize === option.value}
                   >
                     {option.name}
@@ -731,7 +770,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                     key={color.value}
                     className={accentColor === color.value ? 'active' : ''}
                     style={{ backgroundColor: color.value }}
-                    onClick={() => setAccentColor(color.value)}
+                    onClick={() => {
+                      setAccentColor(color.value);
+                      void settingsStore.update({ accentColor: color.value });
+                    }}
                     aria-label={color.name}
                     aria-pressed={accentColor === color.value}
                   />
@@ -745,7 +787,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   <input
                     type="color"
                     value={accentColor}
-                    onChange={(event) => setAccentColor(event.target.value)}
+                    onChange={(event) => {
+                      setAccentColor(event.target.value);
+                      void settingsStore.update({ accentColor: event.target.value });
+                    }}
                     aria-label="Choose a custom accent color"
                   />
                 </label>
@@ -787,11 +832,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 </span>
                 <ChevronRight size={18} aria-hidden="true" />
               </button>
-              <button
-                className="account-action"
-                type="button"
-                onClick={() => void exportAccount()}
-              >
+              <button className="account-action" type="button" onClick={() => void exportAccount()}>
                 <span>
                   <strong>Export account data</strong>
                   <small>Download your tasks, events, contacts, and account data as JSON.</small>
@@ -872,6 +913,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   onClick={() => {
                     localStorage.setItem(weekStartStorageKey, 'sunday');
                     setWeekStart('sunday');
+                    void settingsStore.update({ weekStart: 'sunday' });
                   }}
                   aria-pressed={weekStart === 'sunday'}
                 >
@@ -882,6 +924,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   onClick={() => {
                     localStorage.setItem(weekStartStorageKey, 'monday');
                     setWeekStart('monday');
+                    void settingsStore.update({ weekStart: 'monday' });
                   }}
                   aria-pressed={weekStart === 'monday'}
                 >
@@ -941,17 +984,27 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
             </div>
             <div className="settings-section calendar-sync-settings">
               <div>
-                <h2>Contact sync</h2>
+                <h2>Calendar and contact sync</h2>
                 <p>
-                  Use this URL in your CardDAV client. Sign in with your account email and an app
-                  password. CalDAV calendar sync is not available yet.
+                  CalDAV calendar sync is in beta. Add the server URL to a CalDAV client and sign in
+                  with your account email and a DAV app password. The server advertises your
+                  calendars after sign-in.
                 </p>
                 <div className="sync-urls">
+                  <label>
+                    CalDAV server URL<code>{caldavBaseUrl}</code>
+                  </label>
                   <label>
                     CardDAV server URL<code>{carddavBaseUrl}</code>
                   </label>
                 </div>
                 <div className="app-passwords">
+                  <strong>Setup</strong>
+                  <ol>
+                    <li>Generate an app password below and copy it; it is shown once.</li>
+                    <li>In your calendar client, add an account using the CalDAV server URL.</li>
+                    <li>Use your Taskboard account email as the user name and the app password.</li>
+                  </ol>
                   <strong>DAV app passwords</strong>
                   <p>
                     App passwords can be used instead of your real password. You will only see the
@@ -992,7 +1045,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 </div>
               </div>
               <span className="status-pill">
-                <span /> CardDAV available
+                <span /> CalDAV beta · CardDAV available
               </span>
             </div>
           </>
@@ -1066,7 +1119,11 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
             />
             {themeImportError && <small className="settings-error">{themeImportError}</small>}
             <div className="modal-actions">
-              <button type="button" className="button button-quiet" onClick={() => setThemePasteOpen(false)}>
+              <button
+                type="button"
+                className="button button-quiet"
+                onClick={() => setThemePasteOpen(false)}
+              >
                 Cancel
               </button>
               <button

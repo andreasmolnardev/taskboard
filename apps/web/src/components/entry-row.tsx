@@ -1,6 +1,5 @@
+import { offlineCollection, offlineRecurrence } from '../offline';
 import { CalendarDays, Check, MoreHorizontal, Trash2 } from 'lucide-react';
-import { apiFetch } from '../api/client';
-import { pb } from '../api/pocketbase';
 import type { Entry } from '../data';
 import { useState } from 'react';
 
@@ -22,7 +21,7 @@ export function EntryRow({
     setBusy(true);
     setError('');
     try {
-      await pb.collection(collection).update(entry.masterId ?? entry.id, {
+      await offlineCollection(collection).update(entry.masterId ?? entry.id, {
         completed,
         status: completed ? 'COMPLETED' : 'NEEDS-ACTION',
         completed_at: completed ? new Date().toISOString() : '',
@@ -50,17 +49,9 @@ export function EntryRow({
     try {
       if (occurrence) {
         const recurrenceId = String(entry.fields?.recurrence_id);
-        const response = await apiFetch(`/api/calendar/occurrences/${entry.masterId}/cancel`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${pb.authStore.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ recurrenceId }),
-        });
-        if (!response.ok) throw new Error('Could not delete this occurrence.');
+        await offlineRecurrence(entry.masterId!, 'cancel', recurrenceId);
       } else {
-        await pb.collection(collection).delete(entry.id);
+        await offlineCollection(collection).delete(entry.id);
       }
       onChanged?.();
     } catch {

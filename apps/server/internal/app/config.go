@@ -20,6 +20,7 @@ type Config struct {
 	RegistrationMode RegistrationMode
 	LogLevel         string
 	StoragePath      string
+	WebPath          string
 	Development      bool
 	BackupEnabled    bool
 	BackupCron       string
@@ -45,6 +46,7 @@ func LoadConfig() Config {
 		RegistrationMode: registrationMode(),
 		LogLevel:         env("SLOPSTACK_LOG_LEVEL", "info"),
 		StoragePath:      env("SLOPSTACK_STORAGE_PATH", "pb_data"),
+		WebPath:          env("SLOPSTACK_WEB_PATH", "public"),
 		Development:      envBool("SLOPSTACK_DEVELOPMENT", false),
 		BackupEnabled:    envBool("SLOPSTACK_BACKUP_ENABLED", false),
 		BackupCron:       env("SLOPSTACK_BACKUP_CRON", "0 3 * * *"),

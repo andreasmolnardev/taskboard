@@ -1,3 +1,4 @@
+import { offlineCollection, offlineRecurrence, waitForOfflineRecord } from '../../offline';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -5,6 +6,9 @@ import { apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
 import { entries, getActiveContainers, lists, type Entry } from '../../data';
 import { CreateFields } from '../create-fields';
+import { ResourceForm } from '../../lib/slopstack';
+import { calendarResource, listResource } from '../../resources/taskboard';
+import { taskboardColorField } from '../../application';
 import { localToRecord, recordToLocal } from './create-composer.helpers';
 
 type Props = {
@@ -15,7 +19,6 @@ type Props = {
   color: string;
   editing?: Entry | null;
   onTypeChange: (type: string) => void;
-  onColorChange: (color: string) => void;
   onClose: () => void;
   onCreated: () => void;
 };
@@ -87,7 +90,6 @@ export function CreateComposer({
   color,
   editing,
   onTypeChange,
-  onColorChange,
   onClose,
   onCreated,
 }: Props) {
@@ -95,11 +97,15 @@ export function CreateComposer({
   const composerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState<number>();
   const [closing, setClosing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const savedRecordId = useRef('');
   const set = (key: string, value: string | boolean) =>
     setForm((current) => ({ ...current, [key]: value }));
 
   useEffect(() => {
     if (!open) return;
+    savedRecordId.current = '';
     setClosing(false);
     const fields = (editing?.fields ?? {}) as Form;
     const entryType = editing?.type ?? type;
@@ -146,8 +152,27 @@ export function CreateComposer({
       onClose();
     }
   };
+  const saveContainer = async (values: Record<string, unknown>) => {
+    const owner = pb.authStore.record?.id;
+    if (!owner) throw new Error('Sign in before creating a list or calendar.');
+    const collection = type === 'calendar' ? 'calendars' : 'lists';
+    await offlineCollection(collection).create({
+      owner,
+      name: String(values.name).trim(),
+      description: String(values.description ?? ''),
+      color: String(values.color),
+    });
+    onCreated();
+    close();
+  };
+
   const save = async () => {
+    if (savingRef.current) return;
     if (!String(form.title ?? '').trim()) return;
+    if (!navigator.onLine && String(form.reminder_minutes ?? '')) {
+      set('error', 'Reminders need a connection. Clear the reminder to save this entry offline.');
+      return;
+    }
     const owner = pb.authStore.record?.id;
     const now = new Date().toISOString();
     const collection =
@@ -170,7 +195,10 @@ export function CreateComposer({
     const start = localToRecord(startInput, allDay);
     const end = localToRecord(endInput, allDay);
     const due = localToRecord(dueInput, false);
-    if ((type === 'event' && startInput && !start.index) || (type === 'task' && dueInput && !due.index)) {
+    if (
+      (type === 'event' && startInput && !start.index) ||
+      (type === 'task' && dueInput && !due.index)
+    ) {
       set('error', 'Enter a valid date and time.');
       return;
     }
@@ -230,35 +258,32 @@ export function CreateComposer({
       ])
         delete saveValues[field];
     }
+    savingRef.current = true;
+    setSaving(true);
     try {
       if (editing?.masterId && type === 'event' && form.recurrence_scope === 'occurrence') {
         const recurrenceId = String(
           form.recurrence_id ?? editing.fields?.recurrence_id ?? editing.id.split(':')[1] ?? '',
         );
-        const response = await apiFetch(`/api/calendar/occurrences/${editing.masterId}/override`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${pb.authStore.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ recurrenceId, values: saveValues }),
-        });
-        if (!response.ok) throw new Error('Could not save this occurrence.');
+        await offlineRecurrence(editing.masterId, 'override', recurrenceId, saveValues);
         onCreated();
         close();
         return;
       }
-      const record = editing
-        ? await pb.collection(collection).update(editing.masterId ?? editing.id, saveValues)
-        : await pb.collection(collection).create(saveValues);
+      const targetId = editing?.masterId ?? editing?.id ?? savedRecordId.current;
+      const record = targetId
+        ? await offlineCollection(collection).update(targetId, saveValues)
+        : await offlineCollection(collection).create(saveValues);
+      savedRecordId.current = record.id;
       if (type === 'list' || type === 'calendar') {
         onCreated();
         close();
         return;
       }
       if (String(reminderMinutes) && Number.isFinite(Number(reminderMinutes))) {
+        await waitForOfflineRecord(collection, record.id);
         const targetAt = type === 'task' ? record.due_date : record.start_date;
-        await apiFetch('/api/reminders', {
+        const reminderResponse = await apiFetch('/api/reminders', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${pb.authStore.token}`,
@@ -272,6 +297,8 @@ export function CreateComposer({
             channel: 'in-app',
           }),
         });
+        if (!reminderResponse.ok)
+          throw new Error('Could not add the reminder. Try again when connected.');
       }
       const containerId = String(type === 'task' ? record.list : record.calendar);
       const container = lists.find((item) => item.id === containerId);
@@ -293,13 +320,20 @@ export function CreateComposer({
       else entries.push(entry);
       onCreated();
       close();
-    } catch {
-      set('error', 'Could not save this entry.');
+    } catch (reason) {
+      set(
+        'error',
+        savedRecordId.current
+          ? `Entry saved on this device. ${reason instanceof Error ? reason.message : 'Could not finish saving.'}`
+          : 'Could not save this entry.',
+      );
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
   const renderExtraFields = (entryType: string) => (
     <div className="ical-fields">
-
       {editing?.masterId && entryType === 'event' && (
         <label>
           Edit scope
@@ -480,34 +514,44 @@ export function CreateComposer({
             </TabsContent>
           ))}
           <TabsContent value="list">
-            <CreateFields
-              title={String(form.title ?? '')}
-              setTitle={(value) => set('title', value)}
-              description={String(form.description ?? '')}
-              setDescription={(value) => set('description', value)}
-              placeholder="Name this list"
-              color={color}
-              setColor={onColorChange}
-              showColor
+            <ResourceForm
+              key={`list-${open}`}
+              resource={listResource}
+              initialValues={{
+                name: String(form.title ?? ''),
+                description: String(form.description ?? ''),
+                color,
+              }}
+              fieldRenderers={[taskboardColorField]}
+              submitLabel="Create list"
+              onSubmit={saveContainer}
             />
           </TabsContent>
           <TabsContent value="calendar">
-            <CreateFields
-              title={String(form.title ?? '')}
-              setTitle={(value) => set('title', value)}
-              description={String(form.description ?? '')}
-              setDescription={(value) => set('description', value)}
-              placeholder="Name this calendar"
-              color={color}
-              setColor={onColorChange}
-              showColor
+            <ResourceForm
+              key={`calendar-${open}`}
+              resource={calendarResource}
+              initialValues={{
+                name: String(form.title ?? ''),
+                description: String(form.description ?? ''),
+                color,
+              }}
+              fieldRenderers={[taskboardColorField]}
+              submitLabel="Create calendar"
+              onSubmit={saveContainer}
             />
           </TabsContent>
         </Tabs>
         {form.error && <p className="form-error">{String(form.error)}</p>}
-        <button className="button button-primary composer-save" onClick={() => void save()}>
-          <Plus size={17} /> {editing ? 'Save changes' : `Create ${type}`}
-        </button>
+        {type !== 'list' && type !== 'calendar' && (
+          <button
+            className="button button-primary composer-save"
+            disabled={saving}
+            onClick={() => void save()}
+          >
+            <Plus size={17} /> {editing ? 'Save changes' : `Create ${type}`}
+          </button>
+        )}
       </div>
     </div>
   );

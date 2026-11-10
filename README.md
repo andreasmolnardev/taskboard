@@ -2,7 +2,7 @@
 A todo and calendar app created using Slopstack as a template
 Which means that the React client uses the pocketbase js sdk for auth and crud
 
-Supports iCalendar import/export and basic CardDAV contact sync. Full CalDAV calendar sync is planned.
+Supports iCalendar import/export, beta CalDAV calendar sync, and basic CardDAV contact sync.
 
 ## Sidebar
 In desktop its on the left edge, bottom one on mobile

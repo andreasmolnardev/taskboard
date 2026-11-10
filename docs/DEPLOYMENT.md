@@ -73,7 +73,7 @@ The drill needs Docker access and enough temporary disk space for the restored d
 
 ## Frontend
 
-The frontend is a static Vite build. Keep `/api` proxied to the Go runtime or set `VITE_API_URL` to the deployed API origin.
+The frontend is a static Vite build. The Go runtime serves the build from `SLOPSTACK_WEB_PATH` (default `public`); the Docker image puts it there. Client routes fall back to `index.html`, while API and DAV routes keep their own responses. If hosting the frontend elsewhere, keep `/api` proxied to the Go runtime or set `VITE_API_URL` to the deployed API origin. See [offline use and sync](OFFLINE.md) for PWA setup and rollout.
 
 ## Upgrades and rollback
 

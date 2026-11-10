@@ -30,6 +30,8 @@ var accountDataCollections = []struct {
 	{"notifications", "owner"},
 	{"reminders", "owner"},
 	{"caldav_changes", "owner"},
+	{"sync_changes", "owner"},
+	{"sync_receipts", "owner"},
 	{"app_passwords", "user"},
 	{"user_permissions", "user"},
 	{"group_members", "user"},
@@ -59,10 +61,15 @@ func exportAccountRoute(event *core.RequestEvent) error {
 	}
 
 	for _, definition := range accountDataCollections {
+		sortField := "created"
+		collection, findErr := event.App.FindCollectionByNameOrId(definition.name)
+		if findErr == nil && collection.Fields.GetByName(sortField) == nil {
+			sortField = "id"
+		}
 		records, err := event.App.FindRecordsByFilter(
 			definition.name,
 			definition.field+" = {:user}",
-			"created",
+			sortField,
 			0,
 			0,
 			dbx.Params{"user": user.Id},

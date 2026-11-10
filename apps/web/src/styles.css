@@ -849,7 +849,8 @@ h3 {
 .row-more {
   opacity: 0;
 }
-.entry-row:hover .row-more {
+.entry-row:hover .row-more,
+.entry-row:focus-within .row-more {
   opacity: 1;
 }
 .lists-layout {
@@ -1773,9 +1774,11 @@ footer .sync-dot {
     flex-basis: 54px;
     font-size: 10px;
   }
-  .entry-list,
-  .row-more {
+  .entry-list {
     display: none;
+  }
+  .row-more {
+    opacity: 1;
   }
   .lists-layout {
     grid-template-columns: 1fr;
@@ -1973,3 +1976,16 @@ footer .sync-dot {
     display: none;
   }
 }
+
+.offline-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+}
+.offline-status details { width: 100%; }
+.offline-conflict-values { display: flex; flex-wrap: wrap; gap: 1rem; }
+.offline-conflict-values > div { flex: 1 1 16rem; min-width: 0; }
+.offline-conflict-values pre { white-space: pre-wrap; overflow-wrap: anywhere; }

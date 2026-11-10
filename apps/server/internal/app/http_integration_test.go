@@ -25,7 +25,7 @@ type httpIntegrationServer struct {
 	client *http.Client
 }
 
-func newHTTPIntegrationServer(t *testing.T) *httpIntegrationServer {
+func newHTTPIntegrationServer(t *testing.T, configs ...Config) *httpIntegrationServer {
 	t.Helper()
 
 	pb := pocketbase.NewWithConfig(pocketbase.Config{
@@ -34,7 +34,11 @@ func newHTTPIntegrationServer(t *testing.T) *httpIntegrationServer {
 		DefaultEncryptionEnv: "pb_test_env",
 	})
 	api := humago.New(http.NewServeMux(), huma.DefaultConfig("Taskboard test API", "test"))
-	Register(pb, Config{RegistrationMode: RegistrationApproval}, api)
+	config := Config{RegistrationMode: RegistrationApproval}
+	if len(configs) > 0 {
+		config = configs[0]
+	}
+	Register(pb, config, api)
 	if err := pb.Bootstrap(); err != nil {
 		t.Fatal(err)
 	}
@@ -246,6 +250,15 @@ func TestCalDAVHTTPIntegration(t *testing.T) {
 	if status != http.StatusCreated || createdETag == "" || headers.Get("Location") == "" {
 		t.Fatalf("CalDAV PUT create = %d, ETag %q, Location %q", status, createdETag, headers.Get("Location"))
 	}
+	createdEvents, err := server.app.FindRecordsByFilter("events", "owner = {:owner} && uid = {:uid}", "", 1, 0, dbx.Params{"owner": owner.Id, "uid": "http-event@example.com"})
+	if err != nil || len(createdEvents) != 1 {
+		t.Fatalf("CalDAV-created event not found for sync assertion: records=%d err=%v", len(createdEvents), err)
+	}
+	eventID := createdEvents[0].Id
+	createdRevision := latestRecordRevision(server.app, owner.Id, "events", eventID)
+	if createdRevision == 0 {
+		t.Fatal("CalDAV create did not append an offline sync change")
+	}
 	status, headers, body = integrationRequest(t, server, http.MethodGet, resourcePath, "", ownerAuth)
 	if status != http.StatusOK || headers.Get("ETag") != createdETag || !strings.Contains(body, "SUMMARY:Initial event") {
 		t.Fatalf("CalDAV GET = %d, ETag %q, body = %s", status, headers.Get("ETag"), body)
@@ -269,6 +282,10 @@ func TestCalDAVHTTPIntegration(t *testing.T) {
 	updatedETag := headers.Get("ETag")
 	if status != http.StatusNoContent || updatedETag == "" || updatedETag == createdETag {
 		t.Fatalf("CalDAV PUT update = %d, old ETag %q, new ETag %q", status, createdETag, updatedETag)
+	}
+	updatedRevision := latestRecordRevision(server.app, owner.Id, "events", eventID)
+	if updatedRevision <= createdRevision {
+		t.Fatalf("CalDAV update did not advance offline sync revision: %d -> %d", createdRevision, updatedRevision)
 	}
 	status, _, _ = integrationRequest(t, server, http.MethodPut, resourcePath, updatedICS, mergeHeaders(ownerAuth, http.Header{"Content-Type": []string{"text/calendar"}, "If-Match": []string{createdETag}}))
 	if status != http.StatusPreconditionFailed {
@@ -296,6 +313,9 @@ func TestCalDAVHTTPIntegration(t *testing.T) {
 	status, _, _ = integrationRequest(t, server, http.MethodDelete, resourcePath, "", mergeHeaders(ownerAuth, http.Header{"If-Match": []string{updatedETag}}))
 	if status != http.StatusNoContent {
 		t.Fatalf("CalDAV DELETE = %d, want %d", status, http.StatusNoContent)
+	}
+	if !latestRecordDeleted(server.app, owner.Id, "events", eventID) {
+		t.Fatal("CalDAV delete did not append an offline sync tombstone")
 	}
 	status, _, body = integrationRequest(t, server, "REPORT", calendarPath+"/", syncRequestWithToken(updatedToken), withContentType(ownerAuth))
 	if status != http.StatusMultiStatus || !strings.Contains(body, resourcePath) || !strings.Contains(body, "404 Not Found") {

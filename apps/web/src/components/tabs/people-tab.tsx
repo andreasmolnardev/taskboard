@@ -1,3 +1,4 @@
+import { offlineSnapshot } from '../../offline';
 import { useEffect, useState } from 'react';
 import { Mail, Pencil, Phone, Plus, Share2, Trash2, UserRound } from 'lucide-react';
 import { pb } from '../../api/pocketbase';
@@ -54,18 +55,23 @@ export function PeopleTab() {
     setError('');
     try {
       const filter = `owner = "${user}"`;
-      const addressBooks = await pb
-        .collection('address_books')
-        .getFullList<{ id: string; name: string }>({ filter, sort: 'name' });
-      if (addressBooks.length === 0) {
-        const book = await pb
+      const { data, cached } = await offlineSnapshot('people', async () => {
+        const addressBooks = await pb
           .collection('address_books')
-          .create({ owner: user, name: 'Contacts', color: '#7657a8' });
-        addressBooks.push({ id: book.id, name: book.name });
-      }
-      const nextContacts = await pb
-        .collection('contacts')
-        .getFullList<Contact>({ filter, sort: 'formatted_name' });
+          .getFullList<{ id: string; name: string }>({ filter, sort: 'name' });
+        if (addressBooks.length === 0) {
+          const book = await pb
+            .collection('address_books')
+            .create({ owner: user, name: 'Contacts', color: '#7657a8' });
+          addressBooks.push({ id: book.id, name: book.name });
+        }
+        const nextContacts = await pb
+          .collection('contacts')
+          .getFullList<Contact>({ filter, sort: 'formatted_name' });
+        return { addressBooks, nextContacts };
+      });
+      const { addressBooks, nextContacts } = data;
+      if (cached) setError('Saved contacts · contacts are read-only offline.');
       setBooks(addressBooks);
       setContacts(nextContacts);
     } catch {
@@ -107,6 +113,10 @@ export function PeopleTab() {
     setForm(emptyForm);
   };
   const save = async () => {
+    if (!navigator.onLine) {
+      setError('Contacts are read-only offline.');
+      return;
+    }
     if (!form.formatted_name.trim()) {
       setError('A name is required.');
       return;
@@ -136,6 +146,10 @@ export function PeopleTab() {
     }
   };
   const share = async () => {
+    if (!navigator.onLine) {
+      setError('Contacts are read-only offline.');
+      return;
+    }
     if (!selected) return;
     const details = [
       selected.formatted_name,
@@ -160,6 +174,10 @@ export function PeopleTab() {
     }
   };
   const remove = async () => {
+    if (!navigator.onLine) {
+      setError('Contacts are read-only offline.');
+      return;
+    }
     if (!selected || busy) return;
     setBusy(true);
     setError('');
@@ -299,7 +317,11 @@ export function PeopleTab() {
                   <button className="button button-secondary" onClick={() => edit(selected)}>
                     <Pencil size={16} /> Edit
                   </button>
-                  <button className="icon-button" onClick={() => void share()} aria-label="Share contact">
+                  <button
+                    className="icon-button"
+                    onClick={() => void share()}
+                    aria-label="Share contact"
+                  >
                     <Share2 size={18} />
                   </button>
                   <button

@@ -78,6 +78,11 @@ export function SearchTab({
       return;
     }
     const controller = new AbortController();
+    if (!navigator.onLine) {
+      setDeepResults([]);
+      setError('Deep search needs a connection. Use local search offline.');
+      return;
+    }
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError('');

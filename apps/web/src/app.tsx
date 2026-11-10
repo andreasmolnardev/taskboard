@@ -1,6 +1,15 @@
+import {
+  offlineCollection,
+  offlineJson,
+  retryOfflineSync,
+  startOffline,
+  stopOffline,
+  subscribeOfflineData,
+} from './offline';
+import { OfflineStatus } from './components/app/offline-status';
 import { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import type { RecordModel } from 'pocketbase';
+import type { OfflineRecord as RecordModel } from './offline';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useTheme } from 'next-themes';
 import type { SidebarTab } from './components/sidebar';
@@ -8,7 +17,6 @@ import { taskboardAuth, taskboardShell } from './application';
 import { renderView, resolveView, runAction, useAuthentication } from './lib/slopstack';
 import { TaskboardViewsProvider } from './views/taskboard-views';
 import { createTaskAction, taskboardApplication } from './application';
-import { apiFetch } from './api/client';
 import { pb } from './api/pocketbase';
 import { accentColors, entries, fontSizes, getActiveContainers, lists, type Entry } from './data';
 import { SearchTab } from './components/tabs/search-tab';
@@ -78,8 +86,10 @@ export function App() {
   const [editingEntry, setEditingEntry] = useState<import('./data').Entry | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [dataError, setDataError] = useState('');
+  const [offlineReadyUser, setOfflineReadyUser] = useState('');
   const [, setDataVersion] = useState(0);
   const loadVersion = useRef(0);
+  const offlineReady = useRef<Promise<void>>(Promise.resolve());
   const knownUserId = useRef(pb.authStore.record?.id ?? '');
   const { setTheme } = useTheme();
   useEffect(() => {
@@ -134,6 +144,29 @@ export function App() {
     void taskboardAuth.initialize();
     return () => taskboardAuth.dispose();
   }, []);
+  useEffect(() => {
+    if (!authenticated || !authUserId) {
+      setOfflineReadyUser('');
+      void stopOffline(!pb.authStore.record?.id).catch(() =>
+        setDataError(
+          'Could not clear saved account data. Close other Taskboard tabs and try again.',
+        ),
+      );
+      return;
+    }
+    const unsubscribe = subscribeOfflineData(() => setRefreshKey((key) => key + 1));
+    offlineReady.current = startOffline(authUserId);
+    void offlineReady.current
+      .then(() => {
+        if (pb.authStore.record?.id === authUserId) setOfflineReadyUser(authUserId);
+      })
+      .catch(() => {
+        if (pb.authStore.record?.id === authUserId) setDataError('Could not open saved data.');
+      });
+    return () => {
+      unsubscribe();
+    };
+  }, [authenticated, authUserId]);
   useEffect(() => {
     const nextUserId = authUserId;
     if (nextUserId === knownUserId.current) return;
@@ -191,17 +224,15 @@ export function App() {
     const userId = authUserId;
     const version = ++loadVersion.current;
     const isCurrent = () => version === loadVersion.current && pb.authStore.record?.id === userId;
-    entries.splice(0, entries.length);
-    lists.splice(0, lists.length);
-    setDataVersion((current) => current + 1);
     setDataError('');
     const loadEntries = async () => {
-      const filter = `owner = "${userId}"`;
+      await offlineReady.current;
+      if (!isCurrent()) return;
       const [tasks, events, taskLists, calendars] = await Promise.all([
-        pb.collection('todos').getFullList({ filter, sort: 'due_date' }),
-        pb.collection('events').getFullList({ filter, sort: 'start_date' }),
-        pb.collection('lists').getFullList({ filter, sort: 'name' }),
-        pb.collection('calendars').getFullList({ filter, sort: 'name' }),
+        offlineCollection('todos').getFullList({ sort: 'due_date' }),
+        offlineCollection('events').getFullList({ sort: 'start_date' }),
+        offlineCollection('lists').getFullList({ sort: 'name' }),
+        offlineCollection('calendars').getFullList({ sort: 'name' }),
       ]);
       const containers = [
         ...taskLists.map((record) => ({
@@ -242,10 +273,10 @@ export function App() {
           fields: record as unknown as Record<string, unknown>,
         };
       };
-      const rangeStart = new Date();
-      rangeStart.setFullYear(rangeStart.getFullYear() - 1);
-      const rangeEnd = new Date();
-      rangeEnd.setFullYear(rangeEnd.getFullYear() + 2);
+      const today = new Date();
+      // Stable bounds let offline reloads reuse the saved occurrence range.
+      const rangeStart = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+      const rangeEnd = new Date(today.getFullYear() + 2, today.getMonth(), 1);
       const occurrenceParams = new URLSearchParams({
         start: rangeStart.toISOString(),
         end: rangeEnd.toISOString(),
@@ -265,14 +296,19 @@ export function App() {
         allDay: boolean;
         recurring: boolean;
         recurrenceId?: string;
+        title?: string;
+        description?: string;
+        calendar?: string;
+        color?: string;
       }> = [];
       let occurrenceError = false;
+      let occurrencesCached = false;
       try {
-        const occurrenceResponse = await apiFetch(`/api/calendar/occurrences?${occurrenceParams}`, {
-          headers: { Authorization: `Bearer ${pb.authStore.token}` },
-        });
-        if (!occurrenceResponse.ok) throw new Error('Could not load recurring events.');
-        occurrences = (await occurrenceResponse.json()) as typeof occurrences;
+        const result = await offlineJson<typeof occurrences>(
+          `/api/calendar/occurrences?${occurrenceParams}`,
+        );
+        occurrences = result.data;
+        occurrencesCached = result.cached;
       } catch (error) {
         occurrenceError = true;
         console.warn('Could not load recurring events.', error);
@@ -294,6 +330,11 @@ export function App() {
           if (!entry) return null;
           return {
             ...entry,
+            title: occurrence.title ?? entry.title,
+            description: occurrence.description ?? entry.description,
+            containerId: occurrence.calendar ?? entry.containerId,
+            list: containerById.get(occurrence.calendar ?? '')?.name ?? entry.list,
+            color: occurrence.color ?? entry.color,
             id: occurrence.id,
             masterId: occurrence.masterId,
             date: occurrence.start.slice(0, 10),
@@ -370,7 +411,9 @@ export function App() {
       setDataError(
         occurrenceError
           ? 'Recurring events are unavailable. Showing their base events instead.'
-          : '',
+          : occurrencesCached
+            ? 'Showing saved recurring events. Recent series changes appear after sync.'
+            : '',
       );
       setDataVersion((current) => current + 1);
     };
@@ -400,7 +443,10 @@ export function App() {
     setComposerOpen(true);
   };
   const bindings = {
-    onChanged: () => setRefreshKey((key) => key + 1),
+    onChanged: () => {
+      retryOfflineSync();
+      setRefreshKey((key) => key + 1);
+    },
     onEdit: editEntry,
     onAddList: () => {
       setEditingEntry(null);
@@ -435,9 +481,20 @@ export function App() {
     </TaskboardViewsProvider>
   ) : null;
 
+  if (offlineReadyUser !== authUserId) {
+    return (
+      <ShellComponent>
+        <main className="main-content">
+          <p role="status">{dataError || 'Loading saved data…'}</p>
+        </main>
+      </ShellComponent>
+    );
+  }
+
   return (
     <ShellComponent>
       <main className="main-content">
+        <OfflineStatus />
         {dataError && (
           <p className="form-error app-error" role="alert">
             {dataError}

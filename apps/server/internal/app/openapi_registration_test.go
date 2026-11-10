@@ -24,4 +24,7 @@ func TestRegisterMakesTodoOperationAvailableBeforeServe(t *testing.T) {
 	if !strings.Contains(string(document), `"/api/todos"`) {
 		t.Fatal("OpenAPI document does not contain /api/todos before server start")
 	}
+	if !strings.Contains(string(document), `"/api/sync/pull"`) || !strings.Contains(string(document), `"/api/sync/push"`) {
+		t.Fatal("OpenAPI document does not contain offline sync operations before server start")
+	}
 }

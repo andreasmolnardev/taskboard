@@ -12,6 +12,7 @@
 - Basic CardDAV and beta CalDAV protocol support.
 - Scheduled local or S3-compatible backups plus manual backup/restore CLI.
 - Initial server and web test suites.
+- Offline PWA shell, durable local edits, revision-based sync, and conflict resolution.
 
 ## Near term: make core calendar behavior reliable
 
@@ -49,7 +50,6 @@ CalDAV remains beta until these items pass interoperability tests.
 - Add multi-day layout, keyboard navigation, and stronger mobile views.
 - Open deep-search results in the correct editor or detail view.
 - Add shared calendars, roles, invitations, attendee replies, and free/busy lookup.
-- Add offline/PWA caching, queued edits, realtime updates, and conflict handling.
 - Add account export and deletion flows.
 
 ## Operations and quality

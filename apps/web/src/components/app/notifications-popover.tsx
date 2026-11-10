@@ -1,3 +1,4 @@
+import { offlineJson } from '../../offline';
 import { useEffect, useState } from 'react';
 import { Bell, X } from 'lucide-react';
 import { apiFetch } from '../../api/client';
@@ -28,13 +29,9 @@ export function NotificationsPopover({
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [error, setError] = useState('');
   const load = async () => {
-    const response = await apiFetch('/api/notifications', {
-      headers: { Authorization: `Bearer ${pb.authStore.token}` },
-    });
-    if (!response.ok) throw new Error('Could not load notifications.');
-    const items = (await response.json()) as Notification[];
+    const { data: items, cached } = await offlineJson<Notification[]>('/api/notifications');
     setNotifications(items);
-    setError('');
+    setError(cached ? 'Saved notifications · connect to update them.' : '');
     onCountChange?.(items.filter((item) => !item.read).length);
   };
   const userId = pb.authStore.record?.id;
@@ -46,6 +43,7 @@ export function NotificationsPopover({
   }, [open, userId]);
   const action = async (id: string, path: string, body?: object) => {
     try {
+      if (!navigator.onLine) throw new Error('Notifications are read-only offline.');
       const response = await apiFetch(`/api/notifications/${id}/${path}`, {
         method: path === 'read' ? 'PATCH' : 'POST',
         headers: {
@@ -62,6 +60,7 @@ export function NotificationsPopover({
   };
   const markAllRead = async () => {
     try {
+      if (!navigator.onLine) throw new Error('Notifications are read-only offline.');
       const response = await apiFetch('/api/notifications/read-all', {
         method: 'POST',
         headers: { Authorization: `Bearer ${pb.authStore.token}` },

@@ -1,3 +1,4 @@
+import { offlineCollection } from '../../offline';
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   CalendarDays,
@@ -130,6 +131,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     }
   });
   const carddavBaseUrl = `${apiBaseUrl}/carddav`;
+  const caldavBaseUrl = `${apiBaseUrl}/caldav/`;
 
   useEffect(() => {
     const updateCustomTheme = () => setCustomTheme(readCustomTheme());
@@ -426,9 +428,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     container: ManagedContainer,
     changes: Pick<ManagedContainer, 'name' | 'color' | 'description'>,
   ) => {
-    await pb
-      .collection(container.kind === 'list' ? 'lists' : 'calendars')
-      .update(container.id, changes);
+    await offlineCollection(container.kind === 'list' ? 'lists' : 'calendars').update(
+      container.id,
+      changes,
+    );
     onChanged?.();
   };
   const setContainerVisible = (_container: ManagedContainer, visible: boolean) => {
@@ -440,9 +443,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     onChanged?.();
   };
   const setContainerArchived = async (container: ManagedContainer, archived: boolean) => {
-    await pb
-      .collection(container.kind === 'list' ? 'lists' : 'calendars')
-      .update(container.id, { archived });
+    await offlineCollection(container.kind === 'list' ? 'lists' : 'calendars').update(
+      container.id,
+      { archived },
+    );
     const next = archived
       ? [...new Set([...hiddenContainerIds, container.id])]
       : hiddenContainerIds.filter((id) => id !== container.id);
@@ -455,7 +459,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       await setContainerArchived(container, true);
       return;
     }
-    await pb.collection(container.kind === 'list' ? 'lists' : 'calendars').delete(container.id);
+    await offlineCollection(container.kind === 'list' ? 'lists' : 'calendars').delete(container.id);
     onChanged?.();
   };
 
@@ -980,17 +984,27 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
             </div>
             <div className="settings-section calendar-sync-settings">
               <div>
-                <h2>Contact sync</h2>
+                <h2>Calendar and contact sync</h2>
                 <p>
-                  Use this URL in your CardDAV client. Sign in with your account email and an app
-                  password. CalDAV calendar sync is not available yet.
+                  CalDAV calendar sync is in beta. Add the server URL to a CalDAV client and sign in
+                  with your account email and a DAV app password. The server advertises your
+                  calendars after sign-in.
                 </p>
                 <div className="sync-urls">
+                  <label>
+                    CalDAV server URL<code>{caldavBaseUrl}</code>
+                  </label>
                   <label>
                     CardDAV server URL<code>{carddavBaseUrl}</code>
                   </label>
                 </div>
                 <div className="app-passwords">
+                  <strong>Setup</strong>
+                  <ol>
+                    <li>Generate an app password below and copy it; it is shown once.</li>
+                    <li>In your calendar client, add an account using the CalDAV server URL.</li>
+                    <li>Use your Taskboard account email as the user name and the app password.</li>
+                  </ol>
                   <strong>DAV app passwords</strong>
                   <p>
                     App passwords can be used instead of your real password. You will only see the
@@ -1031,7 +1045,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 </div>
               </div>
               <span className="status-pill">
-                <span /> CardDAV available
+                <span /> CalDAV beta · CardDAV available
               </span>
             </div>
           </>

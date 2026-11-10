@@ -1,3 +1,4 @@
+import { offlineCollection, offlineRecurrence, waitForOfflineRecord } from '../../offline';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -96,11 +97,15 @@ export function CreateComposer({
   const composerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState<number>();
   const [closing, setClosing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const savedRecordId = useRef('');
   const set = (key: string, value: string | boolean) =>
     setForm((current) => ({ ...current, [key]: value }));
 
   useEffect(() => {
     if (!open) return;
+    savedRecordId.current = '';
     setClosing(false);
     const fields = (editing?.fields ?? {}) as Form;
     const entryType = editing?.type ?? type;
@@ -151,7 +156,7 @@ export function CreateComposer({
     const owner = pb.authStore.record?.id;
     if (!owner) throw new Error('Sign in before creating a list or calendar.');
     const collection = type === 'calendar' ? 'calendars' : 'lists';
-    await pb.collection(collection).create({
+    await offlineCollection(collection).create({
       owner,
       name: String(values.name).trim(),
       description: String(values.description ?? ''),
@@ -162,7 +167,12 @@ export function CreateComposer({
   };
 
   const save = async () => {
+    if (savingRef.current) return;
     if (!String(form.title ?? '').trim()) return;
+    if (!navigator.onLine && String(form.reminder_minutes ?? '')) {
+      set('error', 'Reminders need a connection. Clear the reminder to save this entry offline.');
+      return;
+    }
     const owner = pb.authStore.record?.id;
     const now = new Date().toISOString();
     const collection =
@@ -248,35 +258,32 @@ export function CreateComposer({
       ])
         delete saveValues[field];
     }
+    savingRef.current = true;
+    setSaving(true);
     try {
       if (editing?.masterId && type === 'event' && form.recurrence_scope === 'occurrence') {
         const recurrenceId = String(
           form.recurrence_id ?? editing.fields?.recurrence_id ?? editing.id.split(':')[1] ?? '',
         );
-        const response = await apiFetch(`/api/calendar/occurrences/${editing.masterId}/override`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${pb.authStore.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ recurrenceId, values: saveValues }),
-        });
-        if (!response.ok) throw new Error('Could not save this occurrence.');
+        await offlineRecurrence(editing.masterId, 'override', recurrenceId, saveValues);
         onCreated();
         close();
         return;
       }
-      const record = editing
-        ? await pb.collection(collection).update(editing.masterId ?? editing.id, saveValues)
-        : await pb.collection(collection).create(saveValues);
+      const targetId = editing?.masterId ?? editing?.id ?? savedRecordId.current;
+      const record = targetId
+        ? await offlineCollection(collection).update(targetId, saveValues)
+        : await offlineCollection(collection).create(saveValues);
+      savedRecordId.current = record.id;
       if (type === 'list' || type === 'calendar') {
         onCreated();
         close();
         return;
       }
       if (String(reminderMinutes) && Number.isFinite(Number(reminderMinutes))) {
+        await waitForOfflineRecord(collection, record.id);
         const targetAt = type === 'task' ? record.due_date : record.start_date;
-        await apiFetch('/api/reminders', {
+        const reminderResponse = await apiFetch('/api/reminders', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${pb.authStore.token}`,
@@ -290,6 +297,8 @@ export function CreateComposer({
             channel: 'in-app',
           }),
         });
+        if (!reminderResponse.ok)
+          throw new Error('Could not add the reminder. Try again when connected.');
       }
       const containerId = String(type === 'task' ? record.list : record.calendar);
       const container = lists.find((item) => item.id === containerId);
@@ -311,8 +320,16 @@ export function CreateComposer({
       else entries.push(entry);
       onCreated();
       close();
-    } catch {
-      set('error', 'Could not save this entry.');
+    } catch (reason) {
+      set(
+        'error',
+        savedRecordId.current
+          ? `Entry saved on this device. ${reason instanceof Error ? reason.message : 'Could not finish saving.'}`
+          : 'Could not save this entry.',
+      );
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
   const renderExtraFields = (entryType: string) => (
@@ -527,7 +544,11 @@ export function CreateComposer({
         </Tabs>
         {form.error && <p className="form-error">{String(form.error)}</p>}
         {type !== 'list' && type !== 'calendar' && (
-          <button className="button button-primary composer-save" onClick={() => void save()}>
+          <button
+            className="button button-primary composer-save"
+            disabled={saving}
+            onClick={() => void save()}
+          >
             <Plus size={17} /> {editing ? 'Save changes' : `Create ${type}`}
           </button>
         )}

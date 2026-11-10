@@ -54,6 +54,9 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 	})
 
 	pb.OnServe().BindFunc(func(e *core.ServeEvent) error {
+		if err := registerMCPOAuthRoutes(e, config); err != nil {
+			return err
+		}
 		registerRoutes(e, config, api)
 		return e.Next()
 	})
@@ -193,6 +196,7 @@ func registerRoutes(e *core.ServeEvent, config Config, api huma.API) {
 	registerSearchRoutes(e)
 	registerOfflineSyncRoutes(e)
 	registerTodoRoutes(e, config)
+	registerMCPRoute(e, config)
 	registerWebRoutes(e, config)
 }
 

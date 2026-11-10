@@ -14,18 +14,21 @@ const (
 )
 
 type Config struct {
-	HTTPAddress      string
-	PublicURL        string
-	SecureCookies    bool
-	RegistrationMode RegistrationMode
-	LogLevel         string
-	StoragePath      string
-	WebPath          string
-	Development      bool
-	BackupEnabled    bool
-	BackupCron       string
-	BackupMaxKeep    int
-	BackupS3         BackupS3Config
+	HTTPAddress        string
+	PublicURL          string
+	SecureCookies      bool
+	RegistrationMode   RegistrationMode
+	LogLevel           string
+	StoragePath        string
+	WebPath            string
+	Development        bool
+	BackupEnabled      bool
+	BackupCron         string
+	BackupMaxKeep      int
+	BackupS3           BackupS3Config
+	MCPResourceURL     string
+	MCPOAuthSigningKey string
+	MCPPath            string
 }
 
 type BackupS3Config struct {
@@ -40,17 +43,20 @@ type BackupS3Config struct {
 
 func LoadConfig() Config {
 	return Config{
-		HTTPAddress:      env("SLOPSTACK_HTTP_ADDRESS", "0.0.0.0:8090"),
-		PublicURL:        env("SLOPSTACK_PUBLIC_URL", "http://localhost:8090"),
-		SecureCookies:    envBool("SLOPSTACK_SECURE_COOKIES", false),
-		RegistrationMode: registrationMode(),
-		LogLevel:         env("SLOPSTACK_LOG_LEVEL", "info"),
-		StoragePath:      env("SLOPSTACK_STORAGE_PATH", "pb_data"),
-		WebPath:          env("SLOPSTACK_WEB_PATH", "public"),
-		Development:      envBool("SLOPSTACK_DEVELOPMENT", false),
-		BackupEnabled:    envBool("SLOPSTACK_BACKUP_ENABLED", false),
-		BackupCron:       env("SLOPSTACK_BACKUP_CRON", "0 3 * * *"),
-		BackupMaxKeep:    envInt("SLOPSTACK_BACKUP_MAX_KEEP", 14),
+		HTTPAddress:        env("SLOPSTACK_HTTP_ADDRESS", "0.0.0.0:8090"),
+		PublicURL:          env("SLOPSTACK_PUBLIC_URL", "http://localhost:8090"),
+		SecureCookies:      envBool("SLOPSTACK_SECURE_COOKIES", false),
+		RegistrationMode:   registrationMode(),
+		LogLevel:           env("SLOPSTACK_LOG_LEVEL", "info"),
+		StoragePath:        env("SLOPSTACK_STORAGE_PATH", "pb_data"),
+		WebPath:            env("SLOPSTACK_WEB_PATH", "public"),
+		MCPResourceURL:     env("SLOPSTACK_MCP_RESOURCE_URL", ""),
+		MCPOAuthSigningKey: env("SLOPSTACK_MCP_OAUTH_SIGNING_KEY", ""),
+		MCPPath:            env("SLOPSTACK_MCP_PATH", "/mcp"),
+		Development:        envBool("SLOPSTACK_DEVELOPMENT", false),
+		BackupEnabled:      envBool("SLOPSTACK_BACKUP_ENABLED", false),
+		BackupCron:         env("SLOPSTACK_BACKUP_CRON", "0 3 * * *"),
+		BackupMaxKeep:      envInt("SLOPSTACK_BACKUP_MAX_KEEP", 14),
 		BackupS3: BackupS3Config{
 			Enabled:        envBool("SLOPSTACK_BACKUP_S3_ENABLED", false),
 			Bucket:         env("SLOPSTACK_BACKUP_S3_BUCKET", ""),

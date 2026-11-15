@@ -37,4 +37,6 @@ See [API account data](API.md#account-data) for endpoint details and [Deployment
 
 The task server can expose an OAuth-protected MCP endpoint for per-user access. Set `SLOPSTACK_PUBLIC_URL` to the public HTTPS origin and set `SLOPSTACK_MCP_OAUTH_SIGNING_KEY` to a random secret with at least 32 characters. Keep this key private and stable; changing it invalidates active MCP access tokens. The endpoint is `/mcp` by default and can be changed with `SLOPSTACK_MCP_PATH`. Set `SLOPSTACK_MCP_RESOURCE_URL` only when the server's canonical MCP resource URL differs from the default.
 
-With a valid signing key, MCP clients discover OAuth metadata and can register as public clients. Users sign in to Taskboard and approve access. Access tokens last one hour and are bound to the MCP resource. The first tools support listing, reading, creating, and updating the signed-in user's tasks. Refresh tokens and revocation are not supported yet.
+With a valid signing key, MCP clients discover OAuth metadata and can register as public clients. Users sign in to Taskboard and approve access using PKCE. Access tokens last one hour and are bound to the MCP resource. Refresh tokens are rotated on every use and expire after 30 days. Users can inspect and revoke authorized clients in Settings; revocation invalidates that user's sessions immediately.
+
+Task and project MCP tools are documented in [MCP.md](MCP.md). Calendar and contact tool coverage remains in progress.

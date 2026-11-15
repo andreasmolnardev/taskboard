@@ -70,8 +70,8 @@ function TaskboardShell({ children }: { children: ReactNode }) {
       <ApplicationShell
         brand={
           <span className="flex items-center gap-2">
-            <CheckSquare className="size-5" />
-            Taskboard
+            <CheckSquare className="size-5 shrink-0" aria-hidden="true" />
+            <span className="sr-only">Taskboard</span>
           </span>
         }
         items={items}

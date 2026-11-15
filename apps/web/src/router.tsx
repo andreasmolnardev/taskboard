@@ -18,6 +18,7 @@ const searchRoute = createRoute({ getParentRoute: () => rootRoute, path: '/searc
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings' });
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/auth/login' });
 const registerRoute = createRoute({ getParentRoute: () => rootRoute, path: '/auth/register' });
+const adminSsoRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin/sso' });
 
 const routeTree = rootRoute.addChildren([
   upcomingRoute,
@@ -29,6 +30,7 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
   loginRoute,
   registerRoute,
+  adminSsoRoute,
 ]);
 
 export const router = createRouter({ routeTree });

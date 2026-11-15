@@ -23,6 +23,10 @@ Reference routes are `/auth/login`, `/auth/register`, `/auth/forgot-password`, a
 
 The admin console at `/admin/users` manages users through PocketBase's superuser-protected collection API. `/admin/sso` configures OAuth2 providers on the `users` auth collection. Register each provider with `{origin}/api/oauth2-redirect`.
 
+`SLOPSTACK_REGISTRATION_ENABLED=false` blocks public password registration and new OAuth accounts while existing users can still sign in. Taskboard keeps its approval and OTP registration modes. `SLOPSTACK_SSO_ONLY=true` blocks password sign-in only when OAuth is enabled with at least one provider, to avoid locking out all users. `SLOPSTACK_REQUIRE_VERIFIED_EMAIL=true` requires verified email at authentication; password signups receive a PocketBase verification email.
+
+User email addresses are normalized to lowercase and checked case-insensitively to prevent duplicate accounts. Authenticated requests reload the account so disabling a user revokes older tokens. Users cannot change their own disabled state. Linking an OAuth identity requires a correct current password and a five-minute, one-use intent; identity collisions are rejected. Keep at least one linked provider before unlinking another. Custom OIDC providers use PocketBase's `oidc2` provider configuration with issuer and JWKS values for token validation.
+
 ## Backend pattern
 
 Protected routes must reject missing `event.Auth` and apply `Authorize` for permission checks. Frontend navigation and conditional rendering are not security controls.

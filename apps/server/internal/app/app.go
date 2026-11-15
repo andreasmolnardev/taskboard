@@ -45,6 +45,7 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 		return applyBackupConfig(e.App, config)
 	})
 	protectUserAdminFlag(pb, config)
+	registerAuthSecurityHooks(pb, config)
 	registerOwnershipHooks(pb)
 	registerCalDAVChangeHooks(pb)
 	registerOfflineSyncHooks(pb)
@@ -57,6 +58,16 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 	})
 
 	pb.OnServe().BindFunc(func(e *core.ServeEvent) error {
+		e.Router.BindFunc(func(event *core.RequestEvent) error {
+			if event.Auth == nil || event.Auth.Collection().Name != "users" {
+				return event.Next()
+			}
+			latest, err := event.App.FindRecordById("users", event.Auth.Id)
+			if err != nil || latest.GetBool("disabled") {
+				return event.UnauthorizedError("account is disabled", err)
+			}
+			return event.Next()
+		})
 		if err := registerMCPOAuthRoutes(e, config); err != nil {
 			return err
 		}
@@ -177,6 +188,7 @@ func protectUserAdminFlag(pb *pocketbase.PocketBase, config Config) {
 }
 
 func registerRoutes(e *core.ServeEvent, config Config, api huma.API) {
+	registerAuthSecurityRoutes(e, config)
 	e.Router.GET("/openapi.json", func(event *core.RequestEvent) error { return event.JSON(http.StatusOK, api.OpenAPI()) })
 	e.Router.GET("/openapi.yaml", func(event *core.RequestEvent) error {
 		data, err := api.OpenAPI().YAML()

@@ -21,6 +21,7 @@ import { pb } from './api/pocketbase';
 import { accentColors, entries, fontSizes, getActiveContainers, lists, type Entry } from './data';
 import { SearchTab } from './components/tabs/search-tab';
 import { AuthScreen } from './components/app/auth-screen';
+import { AdminSsoPage } from './components/app/admin-sso-page';
 import { CreateComposer } from './components/app/create-composer';
 import { NotificationsPopover } from './components/app/notifications-popover';
 import { applyCustomTheme, readCustomTheme } from './theme';
@@ -136,9 +137,10 @@ export function App() {
     return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
   }, [notificationsOpen]);
   useEffect(() => {
-    const isAuthRoute = pathname.startsWith('/auth/');
+    const isAdminSsoRoute = pathname === '/admin/sso';
+    const isAuthRoute = pathname.startsWith('/auth/') || isAdminSsoRoute;
     if (!authenticated && !isAuthRoute) void navigate({ to: '/auth/login', replace: true });
-    if (authenticated && isAuthRoute) void navigate({ to: '/', replace: true });
+    if (authenticated && isAuthRoute && !isAdminSsoRoute) void navigate({ to: '/', replace: true });
   }, [authenticated, navigate, pathname]);
   useEffect(() => {
     void taskboardAuth.initialize();
@@ -446,7 +448,10 @@ export function App() {
   };
 
   if (!authenticated)
+    if (pathname === '/admin/sso') return <AdminSsoPage />;
+  if (!authenticated)
     return <AuthScreen mode={pathname === '/auth/register' ? 'register' : 'login'} />;
+  if (pathname === '/admin/sso') return <AdminSsoPage />;
   const editEntry = (entry: import('./data').Entry) => {
     setEditingEntry(entry);
     setCreateType(entry.type);

@@ -124,6 +124,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [linkedSsoAccounts, setLinkedSsoAccounts] = useState<LinkedSsoAccount[]>([]);
   const [ssoBusy, setSsoBusy] = useState<string | null>(null);
   const [ssoError, setSsoError] = useState('');
+  const [ssoLinkPassword, setSsoLinkPassword] = useState('');
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [devSeedBusy, setDevSeedBusy] = useState(false);
   const [devSeedMessage, setDevSeedMessage] = useState('');
@@ -204,7 +205,15 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     setSsoBusy(provider.name);
     setSsoError('');
     try {
-      await pb.collection('users').authWithOAuth2({ provider: provider.name });
+      const { intent } = await pb.send('/api/me/sso/link-intent', {
+        method: 'POST',
+        body: { password: ssoLinkPassword },
+      }) as { intent: string };
+      await pb.collection('users').authWithOAuth2({
+        provider: provider.name,
+        headers: { 'X-Taskboard-Link-Intent': intent },
+      });
+      setSsoLinkPassword('');
       await loadSsoAccounts();
     } catch {
       setSsoError(`Could not link ${provider.displayName}. Try again.`);
@@ -214,6 +223,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   };
 
   const unlinkSso = async (provider: SsoProvider) => {
+    if (linkedSsoAccounts.length <= 1) {
+      setSsoError('Keep at least one connected sign-in method.');
+      return;
+    }
     const userId = pb.authStore.record?.id;
     if (!userId) return;
     setSsoBusy(provider.name);
@@ -939,6 +952,9 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   <p>Link a work or personal SSO account for faster sign-in.</p>
                 </div>
                 <div className="sso-account-list">
+                  {ssoProviders.some((provider) => !linkedSsoAccounts.some((account) => account.provider === provider.name)) && (
+                    <input type="password" autoComplete="current-password" aria-label="Current password to link SSO" placeholder="Current password required to link SSO" value={ssoLinkPassword} onChange={(event) => setSsoLinkPassword(event.target.value)} />
+                  )}
                   {ssoProviders.map((provider) => {
                     const linked = linkedSsoAccounts.some(
                       (account) => account.provider === provider.name,
@@ -952,7 +968,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                         <button
                           className="button button-quiet"
                           type="button"
-                          disabled={ssoBusy !== null}
+                          disabled={ssoBusy !== null || (linked && linkedSsoAccounts.length <= 1)}
                           onClick={() => void (linked ? unlinkSso(provider) : linkSso(provider))}
                         >
                           {ssoBusy === provider.name

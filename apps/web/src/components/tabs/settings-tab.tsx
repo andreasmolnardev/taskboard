@@ -109,6 +109,8 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [mcpClients, setMcpClients] = useState<{ id: string; created: string; sessions: number }[]>([]);
   const [mcpClientError, setMcpClientError] = useState('');
   const [mcpClientBusy, setMcpClientBusy] = useState('');
+  const [mcpRedirectUri, setMcpRedirectUri] = useState('');
+  const [newMcpClientId, setNewMcpClientId] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailMessage, setEmailMessage] = useState('');
@@ -296,6 +298,23 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       setAppPasswordError('Could not create an API token.');
     } finally {
       setApiTokenBusy(false);
+    }
+  };
+
+  const createMcpClient = async () => {
+    setMcpClientError('');
+    setNewMcpClientId('');
+    try {
+      const response = await apiFetch('/oauth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ redirect_uris: [mcpRedirectUri.trim()] }),
+      });
+      if (!response.ok) throw new Error();
+      const client = (await response.json()) as { client_id: string };
+      setNewMcpClientId(client.client_id);
+    } catch {
+      setMcpClientError('Could not register the MCP client. Use an HTTPS callback URL or localhost for development.');
     }
   };
 
@@ -1188,6 +1207,8 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
             <button className="button button-quiet" type="button" onClick={() => void createApiToken()} disabled={apiTokenBusy}>{apiTokenBusy ? 'Creating…' : 'Create API token'}</button>
             {apiToken && <div className="new-app-password"><code>{apiToken}</code><button type="button" aria-label="Copy API token" onClick={() => void navigator.clipboard.writeText(apiToken)}><Copy size={15} /></button><p>Copy now. It is valid until your session expires.</p></div>}
             <div><h2>MCP credentials</h2><p>Connected MCP apps use OAuth credentials and can be revoked here.</p></div>
+            <div className="app-password-create"><input aria-label="MCP OAuth redirect URL" type="url" value={mcpRedirectUri} onChange={(event) => setMcpRedirectUri(event.target.value)} placeholder="https://app.example/oauth/callback" /><button className="button button-quiet" type="button" onClick={() => void createMcpClient()} disabled={!mcpRedirectUri.trim()}>Create MCP client</button></div>
+            {newMcpClientId && <p className="new-app-password">MCP client ID: <code>{newMcpClientId}</code></p>}
             {mcpClientError && <p className="form-error" role="alert">{mcpClientError}</p>}
             {mcpClients.length === 0 ? <p>No active MCP clients.</p> : mcpClients.map((client) => <div className="app-password-row" key={client.id}><span><code>{client.id}</code> · {client.sessions} active sessions</span><button type="button" aria-label={`Revoke MCP client ${client.id}`} disabled={mcpClientBusy === client.id} onClick={() => void revokeMCPClient(client.id)}><Trash2 size={14} /></button></div>)}
             <div><h2>CalDAV credentials</h2><p>Generate an app password for CalDAV and CardDAV clients. It is shown only once.</p></div>

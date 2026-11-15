@@ -23,7 +23,7 @@ export function AdminSsoPage() {
   const isSuperuser = pb.authStore.record?.collectionName === '_superusers';
 
   async function load() {
-    const collection = await pb.send('/api/collections/users', { method: 'GET' }) as {
+    const collection = await pb.send('/api/admin/sso', { method: 'GET' }) as {
       oauth2?: { enabled?: boolean; providers?: OidcProvider[] };
     };
     const current = collection.oauth2?.providers?.find((item) => item.name === 'oidc2');
@@ -56,14 +56,14 @@ export function AdminSsoPage() {
     setError('');
     setMessage('');
     try {
-      await pb.send('/api/collections/users', {
+      await pb.send('/api/admin/sso', {
         method: 'PATCH',
         body: {
           oauth2: {
             enabled,
             providers: [
               ...otherProviders,
-              ...(provider.clientId ? [{ ...provider, ...(secret ? { clientSecret: secret } : {}) }] : []),
+              ...(provider.clientId ? [{ ...provider, userInfoURL: '', pkce: true, ...(secret ? { clientSecret: secret } : {}) }] : []),
             ],
           },
         },
@@ -82,14 +82,18 @@ export function AdminSsoPage() {
       const issuer = String(provider.extra?.issuers instanceof Array ? provider.extra.issuers[0] ?? '' : '').trim().replace(/\/$/, '');
       const url = new URL(issuer);
       if (url.protocol !== 'https:' && url.hostname !== 'localhost') throw new Error('Issuer must use HTTPS.');
-      const response = await fetch(`${issuer}/.well-known/openid-configuration`);
-      if (!response.ok) throw new Error('Discovery endpoint returned an error.');
-      const meta = await response.json() as Record<string, string>;
+      const urls = [...new Set([`${issuer}/.well-known/openid-configuration`, `${url.origin}/.well-known/openid-configuration${url.pathname}`])];
+      let meta: Record<string, string> | undefined;
+      for (const discoveryURL of urls) {
+        const response = await fetch(discoveryURL);
+        if (response.ok) { meta = await response.json() as Record<string, string>; break; }
+      }
+      if (!meta) throw new Error('Discovery endpoint returned an error. Enter endpoints explicitly if discovery is unavailable.');
       setProvider((current) => ({
         ...current,
         authURL: meta.authorization_endpoint,
         tokenURL: meta.token_endpoint,
-        userInfoURL: meta.userinfo_endpoint,
+        userInfoURL: '',
         extra: { ...current.extra, issuers: [meta.issuer || issuer], jwksURL: meta.jwks_uri },
       }));
       setError('');
@@ -115,8 +119,8 @@ export function AdminSsoPage() {
     <button type="button" className="button" onClick={() => void discover()}>Load discovery metadata</button>
     <label>Authorization URL<input type="url" value={provider.authURL ?? ''} onChange={(event) => setProvider({ ...provider, authURL: event.target.value })} /></label>
     <label>Token URL<input type="url" value={provider.tokenURL ?? ''} onChange={(event) => setProvider({ ...provider, tokenURL: event.target.value })} /></label>
-    <label>User info URL<input type="url" value={provider.userInfoURL ?? ''} onChange={(event) => setProvider({ ...provider, userInfoURL: event.target.value })} /></label>
-    <label>JWKS URL<input type="url" value={String(provider.extra?.jwksURL ?? '')} onChange={(event) => setProvider({ ...provider, extra: { ...provider.extra, jwksURL: event.target.value } })} /></label>
+    <label>JWKS URL (required)<input type="url" value={String(provider.extra?.jwksURL ?? '')} onChange={(event) => setProvider({ ...provider, extra: { ...provider.extra, jwksURL: event.target.value } })} /></label>
+    <p>Claims come from the signed ID token so PocketBase validates its issuer and signature using JWKS.</p>
     {error && <p className="auth-error" role="alert">{error}</p>}{message && <p className="auth-message">{message}</p>}
     <button className="button button-primary" disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</button>
     <button type="button" className="button" onClick={() => { pb.authStore.clear(); window.location.assign('/auth/login'); }}>Sign out</button>

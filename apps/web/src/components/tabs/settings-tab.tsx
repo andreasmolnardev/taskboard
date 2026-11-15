@@ -125,6 +125,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [ssoBusy, setSsoBusy] = useState<string | null>(null);
   const [ssoError, setSsoError] = useState('');
   const [ssoLinkPassword, setSsoLinkPassword] = useState('');
+  const [ssoRecoveryMessage, setSsoRecoveryMessage] = useState('');
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [devSeedBusy, setDevSeedBusy] = useState(false);
   const [devSeedMessage, setDevSeedMessage] = useState('');
@@ -240,6 +241,22 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       setSsoError(`Could not unlink ${provider.displayName}. Try again.`);
     } finally {
       setSsoBusy(null);
+    }
+  };
+
+  const sendSsoPasswordRecovery = async () => {
+    const email = String(pb.authStore.record?.email ?? '').trim();
+    if (!email) {
+      setSsoError('This account has no email address for password recovery.');
+      return;
+    }
+    setSsoError('');
+    setSsoRecoveryMessage('');
+    try {
+      await pb.collection('users').requestPasswordReset(email);
+      setSsoRecoveryMessage('Check your email for a link to set or reset your password.');
+    } catch {
+      setSsoError('Could not send a password recovery email.');
     }
   };
 
@@ -955,6 +972,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   {ssoProviders.some((provider) => !linkedSsoAccounts.some((account) => account.provider === provider.name)) && (
                     <input type="password" autoComplete="current-password" aria-label="Current password to link SSO" placeholder="Current password required to link SSO" value={ssoLinkPassword} onChange={(event) => setSsoLinkPassword(event.target.value)} />
                   )}
+                  <button className="button button-quiet" type="button" onClick={() => void sendSsoPasswordRecovery()}>Set or reset password by email</button>
                   {ssoProviders.map((provider) => {
                     const linked = linkedSsoAccounts.some(
                       (account) => account.provider === provider.name,
@@ -984,6 +1002,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   })}
                 </div>
                 {ssoError && <p className="error-text">{ssoError}</p>}
+                {ssoRecoveryMessage && <p className="form-message" role="status">{ssoRecoveryMessage}</p>}
               </div>
             )}
           </div>

@@ -37,7 +37,7 @@ export function ApplicationShell({
   const rail = navigationStyle === 'rail';
   return (
     <div className={`min-h-screen bg-background ${rail ? 'md:pl-16' : 'md:pl-64'}`}>
-      <aside className={`fixed inset-y-0 left-0 z-30 hidden border-r bg-card md:flex md:flex-col ${rail ? 'w-16 items-center px-2' : 'w-64 p-4'}`}>
+      <aside className={`fixed left-0 top-1/2 z-30 hidden h-fit -translate-y-1/2 flex-col border border-l-0 bg-card shadow-lg md:flex ${rail ? 'w-16 items-center rounded-r-2xl px-2 py-3' : 'inset-y-0 w-64 rounded-none p-4'}`}>
         <div className="mb-6 flex min-h-10 max-w-full items-center overflow-hidden font-semibold" aria-label="Application">{brand}</div>
         {nav}
         {account && <div className="mt-auto border-t pt-4">{account}</div>}

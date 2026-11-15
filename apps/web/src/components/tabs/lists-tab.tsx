@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Kanban, List, MoreHorizontal, Plus } from 'lucide-react';
+import { ArrowDownWideNarrow, Filter, Kanban, List, MoreHorizontal, Plus } from 'lucide-react';
 import { entries, getActiveContainers, lists, type Entry, type EntryContainer } from '../../data';
 import { EntryRow } from '../entry-row';
 import { ResourceDataView } from '../patterns/resource-data-view';
-import { ResourceQueryControls } from '../patterns/resource-query-controls';
 import { renderLayout } from '../../lib/slopstack';
 import type { ResourceQuery } from '../../lib/slopstack/resource-client';
 import { taskResource } from '../../resources/taskboard';
@@ -23,8 +22,9 @@ export function ListsTab({
   const [selected, setSelected] = useState('');
   const [projectView, setProjectView] = useState<'list' | 'board'>('list');
   const [query, setQuery] = useState<ResourceQuery>({ sort: taskResource.query?.defaultSort });
+  const [filterDraft, setFilterDraft] = useState('');
   useEffect(() => {
-    if (!taskLists.some((list) => list.id === selected)) setSelected(taskLists[0]?.id ?? '');
+    if (selected && !taskLists.some((list) => list.id === selected)) setSelected('');
   }, [selected, taskLists]);
   useEffect(() => {
     try {
@@ -34,15 +34,10 @@ export function ListsTab({
     }
   }, [selected]);
   const current: EntryContainer = taskLists.find((list) => list.id === selected) ?? {
-    id: '',
-    name: 'No lists yet',
-    color: 'var(--muted)',
-    count: 0,
-    description: 'Create a list to organize your entries',
-    kind: 'list',
-    archived: false,
+    id: '', name: taskLists.length ? 'All lists' : 'No lists yet', color: 'var(--muted)', count: entries.length,
+    description: taskLists.length ? 'Tasks from every list' : 'Create a list to organize your entries', kind: 'list', archived: false,
   };
-  const listEntries = entries.filter((entry) => entry.containerId === selected);
+  const listEntries = entries.filter((entry) => selected ? entry.containerId === selected : taskLists.some((list) => list.id === entry.containerId));
   const projectTasks = listEntries.filter((entry) => entry.type === 'task');
   const completedTasks = projectTasks.filter((entry) => entry.done).length;
   const projectProgress = projectTasks.length
@@ -88,15 +83,7 @@ export function ListsTab({
     [group[index], group[target]] = [group[target], group[index]];
     await persistOrder(group);
   };
-  const filteredEntries = listEntries
-    .filter(
-      (entry) =>
-        !query.search ||
-        `${entry.title} ${entry.description}`
-          .toLocaleLowerCase()
-          .includes(query.search.toLocaleLowerCase()),
-    )
-    .filter((entry) => {
+  const filteredEntries = listEntries.filter((entry) => {
       const status = query.filters?.status;
       return !status || (status === 'COMPLETED' ? entry.done : entry.fields?.status === status);
     })
@@ -109,6 +96,7 @@ export function ListsTab({
   const boardTasks = filteredEntries.filter((entry) => entry.type === 'task');
   const master = (
     <div className="list-picker">
+      {taskLists.length > 0 && <button className={`list-picker-item ${!selected ? 'active' : ''}`} onClick={() => setSelected('')}><i style={{ background: 'var(--primary)' }} /><span><strong>All lists</strong><small>Show every task</small></span><em>{entries.length}</em></button>}
       {taskLists.map((list) => (
         <button
           className={`list-picker-item ${selected === list.id ? 'active' : ''}`}
@@ -135,14 +123,13 @@ export function ListsTab({
           </span>
           <p>{current.description}</p>
         </div>
-        <button className="icon-button" aria-label="List options">
-          <MoreHorizontal size={19} />
-        </button>
-        {!current.isProject && selected && (
-          <button type="button" onClick={() => void updateProject({ is_project: true })}>
-            Make project
-          </button>
-        )}
+        <details className="list-options">
+          <summary className="icon-button" aria-label="List options"><MoreHorizontal size={19} /></summary>
+          <div className="list-options-menu">
+            {!current.isProject && selected && <button type="button" onClick={() => void updateProject({ is_project: true })}>Make project</button>}
+            {current.isProject && selected && <button type="button" onClick={() => void updateProject({ is_project: false })}>Turn off project mode</button>}
+          </div>
+        </details>
       </div>
       {current.isProject && (
         <section className="project-overview" aria-label="Project overview">
@@ -198,12 +185,19 @@ export function ListsTab({
           <p>{upcomingDeadlines} upcoming · {overdueTasks} overdue</p>
         </section>
       )}
-      <ResourceQueryControls
-        resource={taskResource}
-        value={query}
-        onChange={setQuery}
-        total={filteredEntries.length}
-      />
+      <div className="list-query-actions">
+        <details className="list-query-popover">
+          <summary className="icon-button" aria-label="Sort tasks"><ArrowDownWideNarrow size={17} /></summary>
+          <label>Sort tasks<select aria-label="Sort tasks" value={query.sort ?? taskResource.query?.defaultSort ?? ''} onChange={(event) => setQuery({ ...query, sort: event.target.value })}>{(taskResource.query?.sortOptions ?? []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        </details>
+        <details className="list-query-popover">
+          <summary className="icon-button" aria-label="Filter tasks"><Filter size={17} /></summary>
+          <div className="list-filter-form">
+            <label>Status<select aria-label="Filter task status" value={filterDraft} onChange={(event) => setFilterDraft(event.target.value)}><option value="">All tasks</option><option value="NEEDS-ACTION">To do</option><option value="IN-PROCESS">In progress</option><option value="COMPLETED">Completed</option></select></label>
+            <button type="button" onClick={(event) => { setQuery({ ...query, filters: filterDraft ? { status: filterDraft } : {} }); event.currentTarget.closest('details')?.removeAttribute('open'); }}>Apply</button>
+          </div>
+        </details>
+      </div>
       {current.isProject && (
         <div className="project-view-toggle" role="group" aria-label="Project task view">
           <button

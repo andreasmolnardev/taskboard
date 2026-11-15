@@ -193,6 +193,11 @@ export function PeopleTab() {
   };
   const updateForm = (key: keyof ContactForm, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
+  const groupedContacts = contacts.reduce<Record<string, Contact[]>>((groups, contact) => {
+    const letter = (contact.formatted_name.trim()[0] || '#').toLocaleUpperCase();
+    (groups[letter] ??= []).push(contact);
+    return groups;
+  }, {});
 
   return (
     <div className="people-page">
@@ -206,22 +211,20 @@ export function PeopleTab() {
           {error}
         </p>
       )}
-      <div className="people-layout">
-        <section className="people-list">
+      {!selected && !editorOpen ? (
+        <section className="people-directory">
           <button className="button button-primary people-add" onClick={() => edit()}>
             <Plus size={17} /> Add person
           </button>
-          {loading ? (
-            <p className="empty-state">Loading contacts…</p>
-          ) : contacts.length === 0 ? (
-            <div className="empty-state">
-              <UserRound size={30} />
-              <p>No contacts yet.</p>
-            </div>
-          ) : (
-            contacts.map((contact) => (
+          {loading ? <p className="empty-state">Loading contacts…</p> : contacts.length === 0 ? (
+            <div className="empty-state"><UserRound size={30} /><p>No contacts yet.</p></div>
+          ) : Object.entries(groupedContacts)
+            .sort(([a], [b]) => a.localeCompare(b)).map(([letter, group]) => (
+              <section className="people-letter-group" key={letter}>
+                <h2>{letter}</h2>
+                <div className="people-card-grid">{group?.map((contact) => (
               <button
-                className={`person-row ${selected?.id === contact.id ? 'active' : ''}`}
+                className="person-card"
                 key={contact.id}
                 onClick={() => select(contact)}
               >
@@ -233,10 +236,14 @@ export function PeopleTab() {
                   <small>{contact.organization || contact.email || 'No details'}</small>
                 </span>
               </button>
-            ))
-          )}
+                ))}</div>
+              </section>
+            ))}
         </section>
-        <section className="person-editor">
+      ) : (
+        <div className="people-detail-view">
+          <button type="button" className="button button-secondary" onClick={() => { clearEditor(); setSelected(null); }}>All people</button>
+          <section className="person-editor">
           {editorOpen ? (
             <>
               <div className="selected-list-header">
@@ -379,8 +386,9 @@ export function PeopleTab() {
               <p>Select a person or add one.</p>
             </div>
           )}
-        </section>
-      </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

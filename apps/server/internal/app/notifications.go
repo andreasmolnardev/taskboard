@@ -162,8 +162,8 @@ func deleteReminderRoute(event *core.RequestEvent) error {
 	if err != nil || record.GetString("owner") != user.Id {
 		return event.NotFoundError("reminder not found", nil)
 	}
-	if status := record.GetString("status"); status != string(reminders.StatusPending) && status != string(reminders.StatusRetry) && status != string(reminders.StatusFailed) {
-		return event.BadRequestError("only undelivered reminders can be removed", nil)
+	if status := record.GetString("status"); status == string(reminders.StatusProcessing) {
+		return event.BadRequestError("a reminder being delivered cannot be removed", nil)
 	}
 	if err := event.App.Delete(record); err != nil {
 		return err

@@ -263,7 +263,7 @@ export function App() {
           id: record.id,
           title: String(record.title ?? ''),
           description: String(record.description ?? ''),
-          date: temporal.date || new Date().toISOString().slice(0, 10),
+          date: temporal.date,
           time: temporal.time,
           containerId: container.id,
           list: container.name,

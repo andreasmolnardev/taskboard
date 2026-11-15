@@ -31,3 +31,7 @@ A popover displaying active and past notifications.
 
 ## Settings
 Account settings, light/dark mode, etc
+
+## Authentication
+
+Taskboard keeps its approval and OTP registration modes. Set `SLOPSTACK_SSO_ONLY=true` to require an enabled OAuth provider for passwordless sign-in, or `SLOPSTACK_REQUIRE_VERIFIED_EMAIL=true` to require verified email. Superusers can configure custom OIDC at `/admin/sso`; account linking requires the current password. See [Authentication](docs/AUTH.md) for the server checks and policy details.

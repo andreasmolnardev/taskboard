@@ -1598,6 +1598,25 @@ footer .sync-dot {
   font-size: 13px;
   font-family: inherit;
 }
+.markdown-editor { display: grid; gap: 6px; }
+.markdown-editor-toolbar { display: flex; flex-wrap: wrap; gap: 4px; }
+.markdown-editor-toolbar button { border: 1px solid var(--border); border-radius: 5px; background: transparent; color: var(--foreground); padding: 3px 7px; font-size: 11px; }
+.markdown-editor-toolbar button[aria-pressed="true"] { background: var(--soft); }
+.markdown-content { color: inherit; font-size: inherit; min-width: 0; }
+.markdown-content > :first-child { margin-top: 0; }
+.markdown-content > :last-child { margin-bottom: 0; }
+.markdown-content p { margin: 0.35em 0; }
+.markdown-content h1, .markdown-content h2, .markdown-content h3 { margin: 0.5em 0 0.25em; font-weight: 650; }
+.markdown-content ul, .markdown-content ol { margin: 0.35em 0; padding-left: 1.4em; }
+.markdown-content ul { list-style: disc; }
+.markdown-content ol { list-style: decimal; }
+.markdown-content a { color: var(--primary); text-decoration: underline; }
+.markdown-content pre { overflow-x: auto; border-radius: 6px; background: var(--soft); padding: 8px; }
+.markdown-content code { font-family: ui-monospace, monospace; }
+.markdown-content table { border-collapse: collapse; }
+.markdown-content th, .markdown-content td { border: 1px solid var(--border); padding: 4px 7px; }
+.markdown-content blockquote { border-left: 2px solid var(--border); padding-left: 0.75em; color: var(--muted); }
+.markdown-preview { min-height: 74px; border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
 .composer-meta {
   display: flex;
   gap: 8px;

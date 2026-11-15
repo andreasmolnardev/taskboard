@@ -12,6 +12,7 @@ import { apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
 import { entries, lists } from '../../data';
 import { taskboardSearchProvider } from '../../application';
+import { MarkdownContent } from '../markdown';
 
 type DeepResult = {
   id: string;
@@ -147,7 +148,7 @@ export function SearchTab({
               </span>
               <span className="command-entry-copy">
                 <strong>{entry.title}</strong>
-                <small>{entry.description || entry.type}</small>
+                {entry.description ? <MarkdownContent value={entry.description} /> : <small>{entry.type}</small>}
               </span>
               <span className="command-entry-list">{entry.container}</span>
             </CommandItem>

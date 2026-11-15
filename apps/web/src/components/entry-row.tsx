@@ -2,6 +2,7 @@ import { offlineCollection, offlineRecurrence } from '../offline';
 import { CalendarDays, Check, MoreHorizontal, Trash2 } from 'lucide-react';
 import type { Entry } from '../data';
 import { useState } from 'react';
+import { MarkdownContent } from './markdown';
 
 export function EntryRow({
   entry,
@@ -81,7 +82,7 @@ export function EntryRow({
       </button>
       <div className="entry-copy">
         <strong>{entry.title}</strong>
-        <span>{entry.description}</span>
+        <MarkdownContent value={entry.description} />
         <small>
           {Object.entries(entry.fields ?? {})
             .filter(

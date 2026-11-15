@@ -228,7 +228,7 @@ export function CreateComposer({
             dtstamp: now,
             ...(type === 'task'
               ? {
-                  due_date: due.index || now,
+                  due_date: due.index || '',
                   due_local: due.local,
                   time_mode: due.mode,
                   timezone:
@@ -306,7 +306,7 @@ export function CreateComposer({
         id: record.id,
         title: String(record.title),
         description: String(record.description ?? ''),
-        date: String(record.due_date ?? record.start_date ?? now).slice(0, 10),
+        date: String(record.due_date || record.start_date || '').slice(0, 10),
         time: record.all_day ? undefined : String(record.start_date ?? '').slice(11, 16),
         containerId,
         list: container?.name ?? (type === 'task' ? 'Tasks' : 'Calendar'),

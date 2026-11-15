@@ -2,7 +2,7 @@ import { CheckSquare, Home, CalendarDays, List, Users, Search, Settings, Bell } 
 import { useEffect, useState, type ReactNode } from 'react';
 import { defineFieldRenderer } from './lib/slopstack';
 import type { FieldRendererProps } from './lib/slopstack';
-import { useNavigate, useRouterState } from '@tanstack/react-router';
+import { useNavigate, useRouterState } from './router';
 import { createPocketBaseAuthAdapter, createAuthenticationStore } from './lib/slopstack';
 import { pb } from './api/pocketbase';
 import { ApplicationShell } from './components/patterns/application-shell';

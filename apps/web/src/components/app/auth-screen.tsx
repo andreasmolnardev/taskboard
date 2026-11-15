@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link } from '@tanstack/react-router';
 import { Check } from 'lucide-react';
 import { apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
@@ -174,11 +173,11 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
         )}
         <p className="auth-switch">
           {mode === 'register' ? 'Already have an account?' : 'Need an account?'}{' '}
-          <Link to={mode === 'register' ? '/auth/login' : '/auth/register'}>
+          <a href={mode === 'register' ? '/auth/login' : '/auth/register'}>
             {mode === 'register' ? 'Sign in' : 'Sign up'}
-          </Link>
+          </a>
         </p>
-        {mode === 'login' && <p className="auth-switch"><Link to="/admin/sso">SSO administration</Link></p>}
+        {mode === 'login' && <p className="auth-switch"><a href="/admin/sso">SSO administration</a></p>}
         {mode === 'login' && import.meta.env.DEV && (
           <button
             type="button"

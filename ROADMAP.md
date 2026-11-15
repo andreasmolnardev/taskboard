@@ -48,7 +48,7 @@ CalDAV remains beta until these items pass interoperability tests.
 
 - [ ] Finish optional project metadata on lists, undated task backlogs, project progress, task grouping and ordering, and checklists (initial support added).
 - [ ] Complete Markdown descriptions across all task/event views and checklist sync coverage (shared editor and sanitized rendering added).
-- [ ] Expand MCP beyond task and project tools to calendar and contact operations.
+- [x] Expand MCP beyond task and project tools to calendar and contact operations.
 - [ ] Complete task and project management tools on the existing MCP endpoint (search/filtering, backlogs, CRUD, progress added; checklist and remaining lifecycle tools are outstanding).
 - [x] Add MCP OAuth refresh-token rotation, expiration, revocation, and authorized-client management.
 

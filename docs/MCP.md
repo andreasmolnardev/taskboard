@@ -12,6 +12,8 @@ All tools operate only on the authenticated user's data. A task's list must also
 - `update_task`: edit the title, Markdown description, status, priority, list, completion, or due date. Set `due_date` to an empty string to unschedule a task.
 - `delete_task`: delete one task.
 
+Delete tools require `confirm: true`. Checklist items are stored with tasks and remain available through the task record, but dedicated MCP checklist CRUD is still outstanding.
+
 Task statuses use the stored iCalendar values `NEEDS-ACTION`, `IN-PROCESS`, `COMPLETED`, and `CANCELLED`.
 
 ## Project tools
@@ -23,6 +25,19 @@ Task statuses use the stored iCalendar values `NEEDS-ACTION`, `IN-PROCESS`, `COM
 
 Project progress is calculated from task completion and is not stored as a percentage.
 
+## Calendar tools
+
+- `list_calendars`: list the user's calendars.
+- `list_events`: search events, filter by calendar and start range, or set `upcoming` to list future events.
+- `get_event`, `create_event`, `update_event`, `delete_event`: event CRUD. Creation and moves validate calendar ownership. Recurrence rules can be read and written as stored RRULE values; selecting an individual occurrence or applying changes to a series is not yet supported through MCP.
+
+## Contact tools
+
+- `list_contacts`: search contacts and optionally filter by address book.
+- `get_contact`, `create_contact`, `update_contact`, `delete_contact`: contact CRUD. Writes validate address-book ownership.
+
+All deletes require an explicit `confirm: true` argument. A missing or false value is rejected.
+
 ## Current limits
 
-Calendar event and contact tools, recurring-series operations, and MCP destructive-operation confirmation are not yet exposed through MCP. Project membership and shared-resource permissions are not available. Calendar and contact data remain accessible through their current Taskboard UI and DAV interfaces.
+Recurring-series operations, dedicated checklist CRUD, and shared-resource permissions are not available through MCP. No project membership or shared calendars are implemented yet.

@@ -117,11 +117,22 @@ func mcpTools() []map[string]any {
 		{"name": "get_task", "description": "Get one of the current user's tasks", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}}, "id")},
 		{"name": "create_task", "description": "Create a task in one of the current user's lists; omit due_date for an unscheduled backlog task", "inputSchema": objectSchema(map[string]any{"title": map[string]any{"type": "string"}, "description": map[string]any{"type": "string"}, "list": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": []string{"NEEDS-ACTION", "IN-PROCESS", "COMPLETED", "CANCELLED"}}, "priority": map[string]any{"type": "string"}, "due_date": map[string]any{"type": "string", "format": "date-time"}}, "title", "list")},
 		{"name": "update_task", "description": "Update task details, status, scheduling, or list", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}, "title": map[string]any{"type": "string"}, "description": map[string]any{"type": "string"}, "completed": map[string]any{"type": "boolean"}, "status": map[string]any{"type": "string", "enum": []string{"NEEDS-ACTION", "IN-PROCESS", "COMPLETED", "CANCELLED"}}, "list": map[string]any{"type": "string"}, "priority": map[string]any{"type": "string"}, "due_date": map[string]any{"type": "string", "format": "date-time"}}, "id")},
-		{"name": "delete_task", "description": "Delete one of the current user's tasks", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}}, "id")},
+		{"name": "delete_task", "description": "Delete one of the current user's tasks. Requires confirm=true.", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}, "confirm": map[string]any{"type": "boolean"}}, "id", "confirm")},
 		{"name": "list_projects", "description": "List and search the current user's project lists", "inputSchema": objectSchema(map[string]any{"search": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": []string{"active", "paused", "completed"}}})},
 		{"name": "get_project", "description": "Get project metadata, task counts, backlog, upcoming deadlines, and overdue tasks", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}}, "id")},
 		{"name": "create_project", "description": "Create a project using a Taskboard list", "inputSchema": objectSchema(map[string]any{"name": map[string]any{"type": "string"}, "description": map[string]any{"type": "string"}, "home_url": map[string]any{"type": "string", "format": "uri"}, "target_date": map[string]any{"type": "string", "format": "date"}}, "name")},
 		{"name": "update_project", "description": "Update a project or archive it", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "description": map[string]any{"type": "string"}, "home_url": map[string]any{"type": "string", "format": "uri"}, "target_date": map[string]any{"type": "string", "format": "date"}, "status": map[string]any{"type": "string", "enum": []string{"active", "paused", "completed"}}, "archived": map[string]any{"type": "boolean"}}, "id")},
+		{"name": "list_calendars", "description": "List the current user's calendars", "inputSchema": objectSchema(map[string]any{})},
+		{"name": "list_events", "description": "Search events or list them in a date range; set upcoming to true for future events", "inputSchema": objectSchema(map[string]any{"calendar": map[string]any{"type": "string"}, "search": map[string]any{"type": "string"}, "start_after": map[string]any{"type": "string", "format": "date-time"}, "start_before": map[string]any{"type": "string", "format": "date-time"}, "upcoming": map[string]any{"type": "boolean"}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 100}})},
+		{"name": "get_event", "description": "Read one of the current user's events", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}}, "id")},
+		{"name": "create_event", "description": "Create an event in one of the user's calendars", "inputSchema": objectSchema(map[string]any{"title": map[string]any{"type": "string"}, "description": map[string]any{"type": "string"}, "calendar": map[string]any{"type": "string"}, "start_date": map[string]any{"type": "string"}, "end_date": map[string]any{"type": "string"}, "all_day": map[string]any{"type": "boolean"}, "timezone": map[string]any{"type": "string"}, "rrule": map[string]any{"type": "string"}, "location": map[string]any{"type": "string"}}, "title", "calendar", "start_date")},
+		{"name": "update_event", "description": "Update an event, including calendar and recurrence fields", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}, "title": map[string]any{"type": "string"}, "description": map[string]any{"type": "string"}, "calendar": map[string]any{"type": "string"}, "start_date": map[string]any{"type": "string"}, "end_date": map[string]any{"type": "string"}, "all_day": map[string]any{"type": "boolean"}, "timezone": map[string]any{"type": "string"}, "rrule": map[string]any{"type": "string"}, "location": map[string]any{"type": "string"}}, "id")},
+		{"name": "delete_event", "description": "Delete one of the current user's events. Requires confirm=true.", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}, "confirm": map[string]any{"type": "boolean"}}, "id", "confirm")},
+		{"name": "list_contacts", "description": "Search and list the current user's contacts", "inputSchema": objectSchema(map[string]any{"address_book": map[string]any{"type": "string"}, "search": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 100}})},
+		{"name": "get_contact", "description": "Read one of the current user's contacts", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}}, "id")},
+		{"name": "create_contact", "description": "Create a contact in one of the user's address books", "inputSchema": objectSchema(map[string]any{"address_book": map[string]any{"type": "string"}, "formatted_name": map[string]any{"type": "string"}, "given_name": map[string]any{"type": "string"}, "family_name": map[string]any{"type": "string"}, "organization": map[string]any{"type": "string"}, "title": map[string]any{"type": "string"}, "email": map[string]any{"type": "string"}, "phone": map[string]any{"type": "string"}, "address": map[string]any{"type": "string"}, "notes": map[string]any{"type": "string"}}, "address_book", "formatted_name")},
+		{"name": "update_contact", "description": "Update one of the current user's contacts", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}, "formatted_name": map[string]any{"type": "string"}, "given_name": map[string]any{"type": "string"}, "family_name": map[string]any{"type": "string"}, "organization": map[string]any{"type": "string"}, "title": map[string]any{"type": "string"}, "email": map[string]any{"type": "string"}, "phone": map[string]any{"type": "string"}, "address": map[string]any{"type": "string"}, "notes": map[string]any{"type": "string"}}, "id")},
+		{"name": "delete_contact", "description": "Delete one of the current user's contacts. Requires confirm=true.", "inputSchema": objectSchema(map[string]any{"id": map[string]any{"type": "string"}, "confirm": map[string]any{"type": "boolean"}}, "id", "confirm")},
 	}
 }
 
@@ -156,7 +167,11 @@ func callMCPTool(app core.App, owner string, call mcpToolCall) (mcpToolResult, e
 	case "update_project":
 		value, err = updateMCPProject(app, owner, call.Arguments)
 	default:
-		return mcpToolResult{}, fmt.Errorf("unknown tool %q", call.Name)
+		var handled bool
+		value, err, handled = callMCPCalendarContactTool(app, owner, call)
+		if !handled {
+			return mcpToolResult{}, fmt.Errorf("unknown tool %q", call.Name)
+		}
 	}
 	if err != nil {
 		return mcpToolResult{}, err
@@ -326,6 +341,9 @@ func validMCPTaskStatus(value string) bool {
 }
 
 func deleteMCPTask(app core.App, owner string, args map[string]any) (map[string]any, error) {
+	if confirmed, _ := args["confirm"].(bool); !confirmed {
+		return nil, errors.New("deleting a task requires confirm=true")
+	}
 	id := stringArg(args, "id")
 	record, err := app.FindRecordById("todos", id)
 	if err != nil || record.GetString("owner") != owner {

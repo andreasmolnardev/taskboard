@@ -485,10 +485,18 @@ func calDAVDelete(event *core.RequestEvent, user *core.Record) error {
 	if err != nil {
 		return event.NotFoundError("calendar resource not found", nil)
 	}
-	if status := checkCalDAVPreconditions(event.Request.Header, true, resource.etag); status != 0 {
-		return event.NoContent(status)
-	}
 	err = event.App.RunInTransaction(func(txApp core.App) error {
+		current, findErr := txApp.FindRecordById(resource.kind, resource.record.Id)
+		if findErr != nil || current.GetString("owner") != user.Id || resourceCalendarID(current, resource.kind) != path.calendarID {
+			return event.NotFoundError("calendar resource not found", nil)
+		}
+		currentResource, resourceErr := makeCalDAVResource(current, resource.kind, user.Id, path.calendarID)
+		if resourceErr != nil {
+			return resourceErr
+		}
+		if status := checkCalDAVPreconditions(event.Request.Header, true, currentResource.etag); status != 0 {
+			return calDAVPutFailure{status: status, message: "ETag precondition failed"}
+		}
 		if resource.kind == "events" && resource.record.GetString("recurrence_parent") == "" {
 			overrides, findErr := txApp.FindRecordsByFilter("events", "recurrence_parent = {:parent}", "id", 0, 0, dbx.Params{"parent": resource.record.Id})
 			if findErr != nil {
@@ -507,6 +515,10 @@ func calDAVDelete(event *core.RequestEvent, user *core.Record) error {
 		return txApp.Delete(record)
 	})
 	if err != nil {
+		var failure calDAVPutFailure
+		if errors.As(err, &failure) && failure.status == http.StatusPreconditionFailed {
+			return event.NoContent(http.StatusPreconditionFailed)
+		}
 		return err
 	}
 	return event.NoContent(http.StatusNoContent)

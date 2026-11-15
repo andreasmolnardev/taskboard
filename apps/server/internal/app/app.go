@@ -71,6 +71,9 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) {
 		if err := registerMCPOAuthRoutes(e, config); err != nil {
 			return err
 		}
+		if err := registerAPITokenRoutes(e); err != nil {
+			return err
+		}
 		registerRoutes(e, config, api)
 		return e.Next()
 	})

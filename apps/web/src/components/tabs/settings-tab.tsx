@@ -104,7 +104,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [appPasswordBusy, setAppPasswordBusy] = useState(false);
   const [appPasswordError, setAppPasswordError] = useState('');
+  const [apiTokens, setApiTokens] = useState<{ id: string; name: string; created: string }[]>([]);
+  const [apiTokenName, setApiTokenName] = useState('');
   const [apiToken, setApiToken] = useState('');
+  const [apiTokenError, setApiTokenError] = useState('');
   const [apiTokenBusy, setApiTokenBusy] = useState(false);
   const [mcpClients, setMcpClients] = useState<{ id: string; created: string; sessions: number }[]>([]);
   const [mcpClientError, setMcpClientError] = useState('');
@@ -150,6 +153,16 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     const updateCustomTheme = () => setCustomTheme(readCustomTheme());
     window.addEventListener('taskboard-custom-theme-change', updateCustomTheme);
     return () => window.removeEventListener('taskboard-custom-theme-change', updateCustomTheme);
+  }, []);
+
+  useEffect(() => {
+    void apiFetch('/api/auth/api-tokens', { headers: { Authorization: `Bearer ${pb.authStore.token}` } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        return (await response.json()) as { id: string; name: string; created: string }[];
+      })
+      .then(setApiTokens)
+      .catch(() => setApiTokenError('Could not load API tokens.'));
   }, []);
 
   useEffect(() => {
@@ -291,14 +304,29 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
 
   const createApiToken = async () => {
     setApiTokenBusy(true);
+    setApiTokenError('');
     try {
-      const refreshed = await pb.collection('users').authRefresh();
-      setApiToken(refreshed.token);
+      const response = await apiFetch('/api/auth/api-tokens', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${pb.authStore.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: apiTokenName }),
+      });
+      if (!response.ok) throw new Error();
+      const created = (await response.json()) as { id: string; name: string; token: string; created: string };
+      setApiTokens((tokens) => [created, ...tokens]);
+      setApiToken(created.token);
+      setApiTokenName('');
     } catch {
-      setAppPasswordError('Could not create an API token.');
+      setApiTokenError('Could not create an API token.');
     } finally {
       setApiTokenBusy(false);
     }
+  };
+
+  const revokeApiToken = async (id: string) => {
+    const response = await apiFetch(`/api/auth/api-tokens/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${pb.authStore.token}` } });
+    if (response.ok) setApiTokens((tokens) => tokens.filter((token) => token.id !== id));
+    else setApiTokenError('Could not revoke this API token.');
   };
 
   const createMcpClient = async () => {
@@ -1203,9 +1231,11 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
         )}
         {activeSection === 'integrations' && (
           <div className="settings-section integrations-settings">
-            <div><h2>API token</h2><p>Create a short lived bearer token for API tools. It uses the same access as your signed in session.</p></div>
-            <button className="button button-quiet" type="button" onClick={() => void createApiToken()} disabled={apiTokenBusy}>{apiTokenBusy ? 'Creating…' : 'Create API token'}</button>
-            {apiToken && <div className="new-app-password"><code>{apiToken}</code><button type="button" aria-label="Copy API token" onClick={() => void navigator.clipboard.writeText(apiToken)}><Copy size={15} /></button><p>Copy now. It is valid until your session expires.</p></div>}
+            <div><h2>API tokens</h2><p>Create named bearer tokens for API tools. Secrets are shown once and can be revoked here.</p></div>
+            <div className="app-password-create"><input aria-label="API token name" value={apiTokenName} onChange={(event) => setApiTokenName(event.target.value)} placeholder="Name, for example automation" /><button className="button button-quiet" type="button" onClick={() => void createApiToken()} disabled={apiTokenBusy || !apiTokenName.trim()}>{apiTokenBusy ? 'Creating…' : 'Create API token'}</button></div>
+            {apiTokenError && <p className="form-error" role="alert">{apiTokenError}</p>}
+            {apiToken && <div className="new-app-password"><code>{apiToken}</code><button type="button" aria-label="Copy API token" onClick={() => void navigator.clipboard.writeText(apiToken)}><Copy size={15} /></button><p>Copy now. Revoke it below when it is no longer needed.</p></div>}
+            {apiTokens.map((token) => <div className="app-password-row" key={token.id}><span>{token.name} · {new Date(token.created).toLocaleDateString()}</span><button type="button" aria-label={`Revoke API token ${token.name}`} onClick={() => void revokeApiToken(token.id)}><Trash2 size={14} /></button></div>)}
             <div><h2>MCP credentials</h2><p>Connected MCP apps use OAuth credentials and can be revoked here.</p></div>
             <div className="app-password-create"><input aria-label="MCP OAuth redirect URL" type="url" value={mcpRedirectUri} onChange={(event) => setMcpRedirectUri(event.target.value)} placeholder="https://app.example/oauth/callback" /><button className="button button-quiet" type="button" onClick={() => void createMcpClient()} disabled={!mcpRedirectUri.trim()}>Create MCP client</button></div>
             {newMcpClientId && <p className="new-app-password">MCP client ID: <code>{newMcpClientId}</code></p>}

@@ -2,6 +2,7 @@ import { offlineCollection } from '../../offline';
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   CalendarDays,
+  Copy,
   ChevronRight,
   Database,
   Download,
@@ -38,13 +39,13 @@ import {
   type WeekStart,
 } from '../../data';
 
-type SettingsSection = 'appearance' | 'account' | 'calendar' | 'dev';
+type SettingsSection = 'appearance' | 'account' | 'calendar' | 'integrations' | 'dev';
 type AccountModal = 'email' | 'password' | 'delete' | null;
 type SsoProvider = { name: string; displayName: string };
 type LinkedSsoAccount = { id: string; provider: string };
 const settingsSections: SettingsSection[] = import.meta.env.DEV
-  ? ['appearance', 'account', 'calendar', 'dev']
-  : ['appearance', 'account', 'calendar'];
+  ? ['appearance', 'account', 'calendar', 'integrations', 'dev']
+  : ['appearance', 'account', 'calendar', 'integrations'];
 
 export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const { theme, setTheme } = useTheme();
@@ -103,6 +104,8 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [appPasswordBusy, setAppPasswordBusy] = useState(false);
   const [appPasswordError, setAppPasswordError] = useState('');
+  const [apiToken, setApiToken] = useState('');
+  const [apiTokenBusy, setApiTokenBusy] = useState(false);
   const [mcpClients, setMcpClients] = useState<{ id: string; created: string; sessions: number }[]>([]);
   const [mcpClientError, setMcpClientError] = useState('');
   const [mcpClientBusy, setMcpClientBusy] = useState('');
@@ -281,6 +284,18 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       setAppPasswordError('Could not create app password.');
     } finally {
       setAppPasswordBusy(false);
+    }
+  };
+
+  const createApiToken = async () => {
+    setApiTokenBusy(true);
+    try {
+      const refreshed = await pb.collection('users').authRefresh();
+      setApiToken(refreshed.token);
+    } catch {
+      setAppPasswordError('Could not create an API token.');
+    } finally {
+      setApiTokenBusy(false);
     }
   };
 
@@ -744,6 +759,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
           {import.meta.env.DEV && <TabsTrigger value="dev">Dev</TabsTrigger>}
         </TabsList>
       </Tabs>
@@ -1165,6 +1181,22 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
               </span>
             </div>
           </>
+        )}
+        {activeSection === 'integrations' && (
+          <div className="settings-section integrations-settings">
+            <div><h2>API token</h2><p>Create a short lived bearer token for API tools. It uses the same access as your signed in session.</p></div>
+            <button className="button button-quiet" type="button" onClick={() => void createApiToken()} disabled={apiTokenBusy}>{apiTokenBusy ? 'Creating…' : 'Create API token'}</button>
+            {apiToken && <div className="new-app-password"><code>{apiToken}</code><button type="button" aria-label="Copy API token" onClick={() => void navigator.clipboard.writeText(apiToken)}><Copy size={15} /></button><p>Copy now. It is valid until your session expires.</p></div>}
+            <div><h2>MCP credentials</h2><p>Connected MCP apps use OAuth credentials and can be revoked here.</p></div>
+            {mcpClientError && <p className="form-error" role="alert">{mcpClientError}</p>}
+            {mcpClients.length === 0 ? <p>No active MCP clients.</p> : mcpClients.map((client) => <div className="app-password-row" key={client.id}><span><code>{client.id}</code> · {client.sessions} active sessions</span><button type="button" aria-label={`Revoke MCP client ${client.id}`} disabled={mcpClientBusy === client.id} onClick={() => void revokeMCPClient(client.id)}><Trash2 size={14} /></button></div>)}
+            <div><h2>CalDAV credentials</h2><p>Generate an app password for CalDAV and CardDAV clients. It is shown only once.</p></div>
+            <div className="app-password-create"><input aria-label="CalDAV credential name" value={newPasswordName} onChange={(event) => setNewPasswordName(event.target.value)} placeholder="Name, for example phone" /><button className="button button-quiet" type="button" onClick={() => void createAppPassword()} disabled={appPasswordBusy}>{appPasswordBusy ? 'Creating…' : 'Create CalDAV credential'}</button></div>
+            {newPassword && <p className="new-app-password"><code>{newPassword}</code></p>}
+            {appPasswordError && <p className="form-error" role="alert">{appPasswordError}</p>}
+            {appPasswords.map((password) => <div className="app-password-row" key={password.id}><span>{password.name}</span><button type="button" aria-label={`Revoke CalDAV credential ${password.name}`} onClick={() => void revokeAppPassword(password.id)}><Trash2 size={14} /></button></div>)}
+            <div className="sync-urls"><label>CalDAV server URL<code>{caldavBaseUrl}</code></label><label>CardDAV server URL<code>{carddavBaseUrl}</code></label></div>
+          </div>
         )}
         {import.meta.env.DEV && activeSection === 'dev' && (
           <div className="settings-section">

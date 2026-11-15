@@ -1167,6 +1167,18 @@ kbd {
   padding: 25px 0;
   border-bottom: 1px solid var(--border);
 }
+.settings-section.integrations-settings {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 22px;
+}
+.integrations-settings > div { max-width: 100%; }
+.integrations-settings .app-password-create { max-width: 680px; }
+.integrations-settings .app-password-create { display: flex; align-items: center; gap: 8px; }
+.integrations-settings .app-password-create input { min-width: 0; flex: 1; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--background); color: var(--foreground); }
+.integrations-settings .sync-urls { display: grid; gap: 8px; }
+.integrations-settings .sync-urls label { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
 .settings-section:last-child {
   border: 0;
 }

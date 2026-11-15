@@ -8,6 +8,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), offlineShell()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: {
-    proxy: { '/api': process.env.SLOPSTACK_API_PROXY_TARGET ?? 'http://localhost:8090' },
+    proxy: {
+      '/api': process.env.SLOPSTACK_API_PROXY_TARGET ?? 'http://localhost:8090',
+      '/oauth': process.env.SLOPSTACK_API_PROXY_TARGET ?? 'http://localhost:8090',
+    },
   },
 });

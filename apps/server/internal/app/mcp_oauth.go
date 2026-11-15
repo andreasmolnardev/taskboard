@@ -116,6 +116,42 @@ func registerMCPOAuthRoutes(e *core.ServeEvent, config Config) error {
 	if _, err := e.App.DB().NewQuery(`CREATE TABLE IF NOT EXISTS mcp_oauth_sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, client_id TEXT NOT NULL, resource TEXT NOT NULL, refresh_hash TEXT NOT NULL UNIQUE, expires INTEGER NOT NULL, created INTEGER NOT NULL)`).Execute(); err != nil {
 		return fmt.Errorf("create MCP OAuth session table: %w", err)
 	}
+	e.Router.GET("/api/mcp/clients", func(event *core.RequestEvent) error {
+		if event.Auth == nil {
+			return event.UnauthorizedError("authentication required", nil)
+		}
+		var rows []struct {
+			ClientID string `db:"client_id" json:"id"`
+			Created  string `db:"created" json:"created"`
+			Sessions int    `db:"sessions" json:"sessions"`
+		}
+		err := event.App.DB().NewQuery(`SELECT c.id AS client_id,c.created AS created,COUNT(s.id) AS sessions FROM mcp_oauth_clients c JOIN mcp_oauth_sessions s ON s.client_id=c.id WHERE s.user_id={:user} AND s.expires>{:now} GROUP BY c.id,c.created ORDER BY c.created DESC`).Bind(dbx.Params{"user": event.Auth.Id, "now": time.Now().Unix()}).All(&rows)
+		if err != nil {
+			return event.InternalServerError("could not list authorized MCP clients", err)
+		}
+		if rows == nil {
+			rows = []struct {
+				ClientID string `db:"client_id" json:"id"`
+				Created  string `db:"created" json:"created"`
+				Sessions int    `db:"sessions" json:"sessions"`
+			}{}
+		}
+		return event.JSON(http.StatusOK, rows)
+	})
+	e.Router.DELETE("/api/mcp/clients/{id}", func(event *core.RequestEvent) error {
+		if event.Auth == nil {
+			return event.UnauthorizedError("authentication required", nil)
+		}
+		result, err := event.App.DB().NewQuery(`DELETE FROM mcp_oauth_sessions WHERE user_id={:user} AND client_id={:client}`).Bind(dbx.Params{"user": event.Auth.Id, "client": event.Request.PathValue("id")}).Execute()
+		if err != nil {
+			return event.InternalServerError("could not revoke MCP client", err)
+		}
+		count, _ := result.RowsAffected()
+		if count == 0 {
+			return event.NotFoundError("authorized MCP client not found", nil)
+		}
+		return event.NoContent(http.StatusNoContent)
+	})
 	e.Router.GET("/.well-known/oauth-protected-resource", func(event *core.RequestEvent) error {
 		return event.JSON(http.StatusOK, mcpProtectedResourceMetadata(config))
 	})

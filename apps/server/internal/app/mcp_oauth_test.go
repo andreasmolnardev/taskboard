@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 func TestValidMCPCodeChallenge(t *testing.T) {
@@ -196,5 +198,42 @@ func TestMCPProtectedResourceMetadata(t *testing.T) {
 	metadata := mcpProtectedResourceMetadata(Config{PublicURL: "https://tasks.example"})
 	if metadata["resource"] != "https://tasks.example/mcp" || metadata["authorization_servers"].([]string)[0] != "https://tasks.example" {
 		t.Fatalf("metadata = %#v", metadata)
+	}
+}
+
+func TestMCPAuthorizedClientManagementIsUserScoped(t *testing.T) {
+	config := Config{PublicURL: "https://tasks.example", MCPResourceURL: "https://tasks.example/mcp", MCPOAuthSigningKey: strings.Repeat("k", 32)}
+	server := newHTTPIntegrationServer(t, config)
+	first := integrationUser(t, server.app, "first-client-owner@example.com")
+	second := integrationUser(t, server.app, "second-client-owner@example.com")
+	_, err := server.app.DB().NewQuery(`INSERT INTO mcp_oauth_clients (id,redirects,created) VALUES ('test-client','[]','2026-11-15T00:00:00Z')`).Execute()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, user := range []*core.Record{first, second} {
+		_, err := server.app.DB().NewQuery(`INSERT INTO mcp_oauth_sessions (id,user_id,client_id,resource,refresh_hash,expires,created) VALUES ({:id},{:user},'test-client',{:resource},{:hash},{:expires},{:created})`).Bind(dbx.Params{
+			"id": user.Id, "user": user.Id, "resource": config.MCPResourceURL, "hash": user.Id + "-hash", "expires": time.Now().Add(time.Hour).Unix(), "created": time.Now().Unix(),
+		}).Execute()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	firstToken := authToken(t, server, first.GetString("email"))
+	secondToken := authToken(t, server, second.GetString("email"))
+	status, _, body := integrationRequest(t, server, http.MethodGet, "/api/mcp/clients", "", bearerHeaders(firstToken))
+	var clients []map[string]any
+	if err := json.Unmarshal([]byte(body), &clients); err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusOK || len(clients) != 1 || clients[0]["id"] != "test-client" {
+		t.Fatalf("list status=%d clients=%#v", status, clients)
+	}
+	status, _, _ = integrationRequest(t, server, http.MethodDelete, "/api/mcp/clients/test-client", "", bearerHeaders(firstToken))
+	if status != http.StatusNoContent {
+		t.Fatalf("revoke status=%d", status)
+	}
+	status, _, body = integrationRequest(t, server, http.MethodGet, "/api/mcp/clients", "", bearerHeaders(secondToken))
+	if status != http.StatusOK || !strings.Contains(body, "test-client") {
+		t.Fatalf("other user's session was removed: status=%d body=%s", status, body)
 	}
 }

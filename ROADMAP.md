@@ -27,6 +27,7 @@
 3. Finish reminders in the UI.
    - Create structured reminders from the composer.
    - Add per-item read, snooze, and dismiss actions.
+   - Add reminder listing and pending reminder removal APIs (implemented; composer UI still uses one offset).
    - Add optional email and Web Push delivery later.
 4. Harden calendar and list ownership.
    - Use validated relations or server hooks for container assignment.

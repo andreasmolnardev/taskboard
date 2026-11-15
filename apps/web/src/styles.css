@@ -1617,6 +1617,11 @@ footer .sync-dot {
 .markdown-content th, .markdown-content td { border: 1px solid var(--border); padding: 4px 7px; }
 .markdown-content blockquote { border-left: 2px solid var(--border); padding-left: 0.75em; color: var(--muted); }
 .markdown-preview { min-height: 74px; border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+.checklist-editor { display: grid; gap: 7px; margin: 12px 0; }
+.checklist-editor-row { display: flex; align-items: center; gap: 6px; }
+.checklist-editor-row input:not([type="checkbox"]) { min-width: 0; flex: 1; border: 1px solid var(--border); border-radius: 5px; background: var(--card); color: var(--foreground); padding: 6px 8px; }
+.checklist-editor-row button { border: 1px solid var(--border); border-radius: 5px; background: transparent; padding: 4px 8px; }
+.checklist-editor small, .checklist-progress { color: var(--muted); font-size: 11px; }
 .composer-meta {
   display: flex;
   gap: 8px;

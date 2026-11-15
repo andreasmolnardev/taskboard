@@ -22,7 +22,20 @@ type Props = {
   onClose: () => void;
   onCreated: () => void;
 };
-type Form = Record<string, string | boolean>;
+type Form = Record<string, unknown>;
+type ChecklistItem = { id: string; title: string; completed: boolean };
+
+function parseChecklist(value: unknown): ChecklistItem[] {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is ChecklistItem =>
+      item && typeof item.id === 'string' && typeof item.title === 'string' && typeof item.completed === 'boolean',
+    );
+  } catch {
+    return [];
+  }
+}
 
 function repeatFromRule(value: unknown) {
   const rule = String(value ?? '').toUpperCase();
@@ -52,6 +65,58 @@ function repeatRule(value: string, original: unknown) {
     default:
       return '';
   }
+}
+
+function ChecklistEditor({
+  items,
+  onChange,
+}: {
+  items: ChecklistItem[];
+  onChange: (items: ChecklistItem[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const addItem = () => {
+    const title = draft.trim();
+    if (!title) return;
+    onChange([...items, { id: crypto.randomUUID(), title, completed: false }]);
+    setDraft('');
+  };
+  return (
+    <section className="checklist-editor" aria-label="Task checklist">
+      <strong>Checklist</strong>
+      {items.map((item, index) => (
+        <div className="checklist-editor-row" key={item.id}>
+          <input
+            type="checkbox"
+            checked={item.completed}
+            aria-label={`Complete ${item.title}`}
+            onChange={(event) => onChange(items.map((current) => current.id === item.id ? { ...current, completed: event.target.checked } : current))}
+          />
+          <input
+            aria-label={`Checklist item ${index + 1}`}
+            value={item.title}
+            onChange={(event) => onChange(items.map((current) => current.id === item.id ? { ...current, title: event.target.value } : current))}
+          />
+          <button type="button" aria-label={`Move ${item.title} up`} disabled={index === 0} onClick={() => {
+            const next = [...items];
+            [next[index - 1], next[index]] = [next[index], next[index - 1]];
+            onChange(next);
+          }}>↑</button>
+          <button type="button" aria-label={`Move ${item.title} down`} disabled={index === items.length - 1} onClick={() => {
+            const next = [...items];
+            [next[index], next[index + 1]] = [next[index + 1], next[index]];
+            onChange(next);
+          }}>↓</button>
+          <button type="button" aria-label={`Delete ${item.title}`} onClick={() => onChange(items.filter((current) => current.id !== item.id))}>×</button>
+        </div>
+      ))}
+      <div className="checklist-editor-row">
+        <input aria-label="New checklist item" placeholder="Add checklist item" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addItem(); } }} />
+        <button type="button" onClick={addItem}>Add</button>
+      </div>
+      {items.length > 0 && <small>{items.filter((item) => item.completed).length} of {items.length} complete</small>}
+    </section>
+  );
 }
 
 const textFields = (type: string) =>
@@ -115,6 +180,7 @@ export function CreateComposer({
     setForm({
       title: editing?.title ?? '',
       description: editing?.description ?? '',
+      checklist: JSON.stringify(fields.checklist ?? []),
       ...fields,
       reminder_minutes: fields.reminder_minutes ?? '',
       repeat: fields.repeat ?? repeatFromRule(fields.rrule),
@@ -188,6 +254,7 @@ export function CreateComposer({
     delete entryForm.recurrence_scope;
     delete entryForm.recurrence_id;
     delete entryForm.repeat;
+    if (type === 'task') entryForm.checklist = parseChecklist(form.checklist);
     const allDay = type === 'event' && Boolean(form.all_day);
     const startInput = String(form.start_local ?? form.start_date ?? '').trim();
     const endInput = String(form.end_local ?? form.end_date ?? '').trim();
@@ -507,6 +574,12 @@ export function CreateComposer({
                 setDescription={(value) => set('description', value)}
                 placeholder={entryType === 'task' ? 'What needs doing?' : 'What is happening?'}
               />
+              {entryType === 'task' && (
+                <ChecklistEditor
+                  items={parseChecklist(form.checklist)}
+                  onChange={(items) => set('checklist', JSON.stringify(items))}
+                />
+              )}
               <details className="advanced-options">
                 <summary>Advanced options</summary>
                 {renderExtraFields(entryType)}
@@ -542,7 +615,7 @@ export function CreateComposer({
             />
           </TabsContent>
         </Tabs>
-        {form.error && <p className="form-error">{String(form.error)}</p>}
+        {Boolean(form.error) && <p className="form-error">{String(form.error)}</p>}
         {type !== 'list' && type !== 'calendar' && (
           <button
             className="button button-primary composer-save"

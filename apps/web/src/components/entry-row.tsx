@@ -15,6 +15,7 @@ export function EntryRow({
 }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const checklist = Array.isArray(entry.fields?.checklist) ? entry.fields.checklist as { completed?: boolean }[] : [];
   const collection = entry.type === 'task' ? 'todos' : 'events';
   const toggleComplete = async () => {
     if (entry.type !== 'task' || busy) return;
@@ -83,6 +84,11 @@ export function EntryRow({
       <div className="entry-copy">
         <strong>{entry.title}</strong>
         <MarkdownContent value={entry.description} />
+        {entry.type === 'task' && checklist.length > 0 && (
+          <small className="checklist-progress">
+            {checklist.filter((item) => item.completed).length} of {checklist.length} checklist items complete
+          </small>
+        )}
         <small>
           {Object.entries(entry.fields ?? {})
             .filter(

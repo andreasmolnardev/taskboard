@@ -123,6 +123,52 @@ func registerNotificationRoutes(e *core.ServeEvent) {
 	e.Router.POST("/api/notifications/{id}/dismiss", dismissNotificationRoute)
 	e.Router.POST("/api/notifications/read-all", readAllNotificationsRoute)
 	e.Router.POST("/api/reminders", createReminderRoute)
+	e.Router.GET("/api/reminders", listRemindersRoute)
+	e.Router.DELETE("/api/reminders/{id}", deleteReminderRoute)
+}
+
+func listRemindersRoute(event *core.RequestEvent) error {
+	user, err := CurrentUser(event)
+	if err != nil {
+		return err
+	}
+	kind := reminders.TargetKind(event.Request.URL.Query().Get("targetKind"))
+	targetID := event.Request.URL.Query().Get("targetId")
+	collection, err := reminderTargetCollection(kind)
+	if err != nil || targetID == "" {
+		return event.BadRequestError("targetKind and targetId are required", err)
+	}
+	target, err := event.App.FindRecordById(collection, targetID)
+	if err != nil || target.GetString("owner") != user.Id {
+		return event.NotFoundError("reminder target not found", nil)
+	}
+	records, err := event.App.FindRecordsByFilter(reminderCollection, "owner={:owner} && target_kind={:kind} && target_id={:target}", "due_at", 100, 0, dbx.Params{"owner": user.Id, "kind": string(kind), "target": targetID})
+	if err != nil {
+		return err
+	}
+	result := make([]map[string]any, 0, len(records))
+	for _, record := range records {
+		result = append(result, map[string]any{"id": record.Id, "key": record.GetString("key"), "targetKind": record.GetString("target_kind"), "targetId": record.GetString("target_id"), "at": record.GetDateTime("at").String(), "offsetMinutes": record.GetInt("offset"), "dueAt": record.GetDateTime("due_at").String(), "channel": record.GetString("channel"), "status": record.GetString("status")})
+	}
+	return event.JSON(http.StatusOK, result)
+}
+
+func deleteReminderRoute(event *core.RequestEvent) error {
+	user, err := CurrentUser(event)
+	if err != nil {
+		return err
+	}
+	record, err := event.App.FindRecordById(reminderCollection, event.Request.PathValue("id"))
+	if err != nil || record.GetString("owner") != user.Id {
+		return event.NotFoundError("reminder not found", nil)
+	}
+	if status := record.GetString("status"); status == string(reminders.StatusProcessing) {
+		return event.BadRequestError("a reminder being delivered cannot be removed", nil)
+	}
+	if err := event.App.Delete(record); err != nil {
+		return err
+	}
+	return event.NoContent(http.StatusNoContent)
 }
 
 func listNotificationsRoute(event *core.RequestEvent) error {

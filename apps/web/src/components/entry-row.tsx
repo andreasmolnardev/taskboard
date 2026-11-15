@@ -2,6 +2,7 @@ import { offlineCollection, offlineRecurrence } from '../offline';
 import { CalendarDays, Check, MoreHorizontal, Trash2 } from 'lucide-react';
 import type { Entry } from '../data';
 import { useState } from 'react';
+import { MarkdownContent } from './markdown';
 
 export function EntryRow({
   entry,
@@ -14,6 +15,7 @@ export function EntryRow({
 }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const checklist = Array.isArray(entry.fields?.checklist) ? entry.fields.checklist as { completed?: boolean }[] : [];
   const collection = entry.type === 'task' ? 'todos' : 'events';
   const toggleComplete = async () => {
     if (entry.type !== 'task' || busy) return;
@@ -81,7 +83,12 @@ export function EntryRow({
       </button>
       <div className="entry-copy">
         <strong>{entry.title}</strong>
-        <span>{entry.description}</span>
+        <MarkdownContent value={entry.description} />
+        {entry.type === 'task' && checklist.length > 0 && (
+          <small className="checklist-progress">
+            {checklist.filter((item) => item.completed).length} of {checklist.length} checklist items complete
+          </small>
+        )}
         <small>
           {Object.entries(entry.fields ?? {})
             .filter(

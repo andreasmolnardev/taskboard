@@ -1,5 +1,6 @@
 import { Palette } from 'lucide-react';
 import { accentColors } from '../data';
+import { MarkdownEditor } from './markdown';
 
 type CreateFieldsProps = {
   title: string;
@@ -31,12 +32,7 @@ export function CreateFields({
         value={title}
         onChange={(event) => setTitle(event.target.value)}
       />
-      <textarea
-        className="composer-description"
-        placeholder="Add a description (optional)"
-        value={description}
-        onChange={(event) => setDescription(event.target.value)}
-      />
+      <MarkdownEditor value={description} onChange={setDescription} />
       {showColor && color && setColor && (
         <div className="create-color-picker" role="group" aria-label="Color">
           <span>Color</span>

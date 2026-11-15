@@ -27,6 +27,7 @@
 3. Finish reminders in the UI.
    - Create structured reminders from the composer.
    - Add per-item read, snooze, and dismiss actions.
+   - Add reminder listing and removal APIs and support multiple configurable offsets in the composer (implemented).
    - Add optional email and Web Push delivery later.
 4. Harden calendar and list ownership.
    - Use validated relations or server hooks for container assignment.
@@ -45,6 +46,12 @@
 CalDAV remains beta until these items pass interoperability tests.
 
 ## Product work
+
+- [ ] Finish optional project metadata on lists, undated task backlogs, project progress, task grouping and ordering, and checklists (initial support added).
+- [ ] Complete Markdown descriptions across all task/event views and checklist sync coverage (shared editor and sanitized rendering added).
+- [x] Expand MCP beyond task and project tools to calendar and contact operations.
+- [ ] Complete task and project management tools on the existing MCP endpoint (search/filtering, backlogs, CRUD, progress added; checklist and remaining lifecycle tools are outstanding).
+- [x] Add MCP OAuth refresh-token rotation, expiration, revocation, and authorized-client management.
 
 - Add drag-to-create, drag-to-move, and resize interactions to time grids.
 - Add multi-day layout, keyboard navigation, and stronger mobile views.

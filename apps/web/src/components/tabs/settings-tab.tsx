@@ -103,6 +103,9 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [appPasswordBusy, setAppPasswordBusy] = useState(false);
   const [appPasswordError, setAppPasswordError] = useState('');
+  const [mcpClients, setMcpClients] = useState<{ id: string; created: string; sessions: number }[]>([]);
+  const [mcpClientError, setMcpClientError] = useState('');
+  const [mcpClientBusy, setMcpClientBusy] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailMessage, setEmailMessage] = useState('');
@@ -140,6 +143,16 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     const updateCustomTheme = () => setCustomTheme(readCustomTheme());
     window.addEventListener('taskboard-custom-theme-change', updateCustomTheme);
     return () => window.removeEventListener('taskboard-custom-theme-change', updateCustomTheme);
+  }, []);
+
+  useEffect(() => {
+    void apiFetch('/api/mcp/clients', { headers: { Authorization: `Bearer ${pb.authStore.token}` } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        return (await response.json()) as { id: string; created: string; sessions: number }[];
+      })
+      .then(setMcpClients)
+      .catch(() => setMcpClientError('Could not load authorized MCP clients.'));
   }, []);
 
   useEffect(() => {
@@ -659,6 +672,23 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     setTheme(nextTheme);
   };
 
+  const revokeMCPClient = async (id: string) => {
+    setMcpClientBusy(id);
+    setMcpClientError('');
+    try {
+      const response = await apiFetch(`/api/mcp/clients/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${pb.authStore.token}` },
+      });
+      if (!response.ok) throw new Error();
+      setMcpClients((current) => current.filter((client) => client.id !== id));
+    } catch {
+      setMcpClientError('Could not revoke this MCP client.');
+    } finally {
+      setMcpClientBusy('');
+    }
+  };
+
   return (
     <>
       <header
@@ -887,6 +917,21 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 </p>
               )}
             </div>
+            <section className="authorized-mcp-clients" aria-label="Authorized MCP clients">
+              <div>
+                <h2>Authorized MCP clients</h2>
+                <p>Apps connected to Taskboard through MCP OAuth.</p>
+              </div>
+              {mcpClientError && <p className="form-error" role="alert">{mcpClientError}</p>}
+              {mcpClients.length === 0 ? <p>No active MCP clients.</p> : mcpClients.map((client) => (
+                <div className="app-password-row" key={client.id}>
+                  <span><code>{client.id}</code> · {client.sessions} active session{client.sessions === 1 ? '' : 's'}</span>
+                  <button type="button" aria-label={`Revoke MCP client ${client.id}`} disabled={mcpClientBusy === client.id} onClick={() => void revokeMCPClient(client.id)}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </section>
             {ssoProviders.length > 0 && (
               <div className="account-sso">
                 <div>

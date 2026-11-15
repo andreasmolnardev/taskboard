@@ -242,6 +242,10 @@ export function App() {
           description: String(record.description ?? ''),
           kind: 'list' as const,
           archived: Boolean(record.archived),
+          isProject: Boolean(record.is_project),
+          projectStatus: String(record.project_status || 'active') as 'active' | 'paused' | 'completed',
+          homeUrl: String(record.home_url ?? ''),
+          targetDate: String(record.target_date ?? '').slice(0, 10),
         })),
         ...calendars.map((record) => ({
           id: record.id,
@@ -250,6 +254,10 @@ export function App() {
           description: String(record.description ?? ''),
           kind: 'calendar' as const,
           archived: Boolean(record.archived),
+          isProject: false,
+          projectStatus: 'active' as const,
+          homeUrl: '',
+          targetDate: '',
         })),
       ];
       const containerById = new Map(containers.map((container) => [container.id, container]));
@@ -263,7 +271,7 @@ export function App() {
           id: record.id,
           title: String(record.title ?? ''),
           description: String(record.description ?? ''),
-          date: temporal.date || new Date().toISOString().slice(0, 10),
+          date: temporal.date,
           time: temporal.time,
           containerId: container.id,
           list: container.name,
@@ -405,6 +413,10 @@ export function App() {
           description: String(container.description || ''),
           kind: container.kind,
           archived: container.archived,
+          isProject: container.isProject,
+          projectStatus: container.projectStatus,
+          homeUrl: container.homeUrl,
+          targetDate: container.targetDate,
           count: loadedEntries.filter((entry) => entry.containerId === container.id).length,
         })),
       );

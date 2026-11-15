@@ -18,7 +18,9 @@ export function UpcomingTab({
   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'task' | 'event'>('all');
-  const visibleEntries = entries.filter((entry) => filter === 'all' || entry.type === filter);
+  const visibleEntries = entries.filter(
+    (entry) => entry.date && (filter === 'all' || entry.type === filter),
+  );
   const grouped = visibleEntries.reduce<Record<string, Entry[]>>((result, entry) => {
     (result[entry.date] ??= []).push(entry);
     return result;

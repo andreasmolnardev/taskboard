@@ -60,6 +60,7 @@ type CachedJson = { data: unknown; cachedAt: number };
 
 const supported = new Set<OfflineCollectionName>(['todos', 'events', 'lists', 'calendars']);
 const groupFields = [
+  ['is_project', 'project_status', 'home_url', 'target_date'],
   [
     'start_date',
     'start_local',

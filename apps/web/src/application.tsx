@@ -11,21 +11,13 @@ import {
   defineApplication,
   defineShell,
   defineSettings,
-  defineView,
   defineAction,
   createSlopstackRegistry,
 } from './lib/slopstack';
 import { taskResource, eventResource, listResource, calendarResource } from './resources/taskboard';
 import { entries, lists } from './data';
-import {
-  CalendarView,
-  ListsView,
-  PeopleView,
-  SearchView,
-  SettingsView,
-  UpcomingView,
-} from './views/taskboard-views';
 import { NavigationLinks } from './components/patterns/navigation-links';
+import { taskboardViews } from './route-definitions';
 
 function TaskboardShell({ children }: { children: ReactNode }) {
   const [notificationCount, setNotificationCount] = useState(0);
@@ -108,24 +100,6 @@ function TaskboardShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
-const routeViews = [
-  ['upcoming', '/', 'Upcoming', UpcomingView],
-  ['calendar', '/calendar', 'Calendar', CalendarView],
-  ['lists', '/lists', 'Lists', ListsView],
-  ['people', '/people', 'People', PeopleView],
-  ['search', '/search', 'Search', SearchView],
-  ['settings', '/settings', 'Settings', SettingsView],
-] as const;
-const views = routeViews.map(([id, path, label, component]) =>
-  defineView({
-    id,
-    path,
-    label,
-    access: { authenticated: true },
-    component,
-  }),
-);
 
 function TaskboardColorField({ field, value, disabled, onChange }: FieldRendererProps) {
   return (
@@ -251,7 +225,7 @@ export const taskboardApplication = defineApplication({
   },
   shell: taskboardShell,
   resources: [taskResource, eventResource, listResource, calendarResource],
-  views,
+  views: taskboardViews,
   layouts: [taskboardLayout],
   settings: [taskboardSettings],
   fieldRenderers: [taskboardColorField],

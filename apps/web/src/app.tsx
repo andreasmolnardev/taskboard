@@ -14,7 +14,7 @@ import { useNavigate, useRouterState } from './router';
 import { useTheme } from 'next-themes';
 import type { SidebarTab } from './components/sidebar';
 import { taskboardAuth, taskboardShell } from './application';
-import { FileRouteOutlet, createFileRoutes, resolveFileRoute, resolveView, runAction, useAuthentication, type FileRouteModule } from './lib/slopstack';
+import { FileRouteOutlet, resolveFileRoute, resolveView, runAction, useAuthentication } from './lib/slopstack';
 import { TaskboardViewsProvider } from './views/taskboard-views';
 import { createTaskAction, taskboardApplication } from './application';
 import { pb } from './api/pocketbase';
@@ -25,9 +25,7 @@ import { AdminSsoPage } from './components/app/admin-sso-page';
 import { CreateComposer } from './components/app/create-composer';
 import { NotificationsPopover } from './components/app/notifications-popover';
 import { applyCustomTheme, readCustomTheme } from './theme';
-
-const fileRouteModules = import.meta.glob('./routes/**/*.{ts,tsx}', { eager: true }) as Record<string, FileRouteModule>;
-const fileRoutes = createFileRoutes(fileRouteModules);
+import { fileRouteModules, fileRoutes } from './route-definitions';
 
 function compactLocalParts(value: unknown) {
   const match = String(value ?? '').match(/^(\\d{4})(\\d{2})(\\d{2})(?:T(\\d{2})(\\d{2}))?/);

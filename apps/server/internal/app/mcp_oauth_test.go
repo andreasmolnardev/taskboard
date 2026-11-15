@@ -125,6 +125,42 @@ func TestMCPOAuthRegisterAndExchangeAuthorizationCode(t *testing.T) {
 	if tokenResponse.StatusCode != 200 || tokenResult["token_type"] != "Bearer" || tokenResult["access_token"] == nil {
 		t.Fatalf("token status=%d body=%#v", tokenResponse.StatusCode, tokenResult)
 	}
+	firstRefresh := tokenResult["refresh_token"].(string)
+	refreshForm := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {firstRefresh}, "client_id": {client.ClientID}, "resource": {config.MCPResourceURL}}
+	rotatedResponse, err := server.client.Post(server.server.URL+"/oauth/token", "application/x-www-form-urlencoded", strings.NewReader(refreshForm.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rotated map[string]any
+	if err := json.NewDecoder(rotatedResponse.Body).Decode(&rotated); err != nil {
+		t.Fatal(err)
+	}
+	rotatedResponse.Body.Close()
+	if rotatedResponse.StatusCode != http.StatusOK || rotated["refresh_token"] == firstRefresh {
+		t.Fatalf("refresh rotation status=%d body=%#v", rotatedResponse.StatusCode, rotated)
+	}
+	reusedResponse, err := server.client.Post(server.server.URL+"/oauth/token", "application/x-www-form-urlencoded", strings.NewReader(refreshForm.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reusedResponse.Body.Close()
+	if reusedResponse.StatusCode != http.StatusBadRequest {
+		t.Fatalf("old refresh token reuse status=%d", reusedResponse.StatusCode)
+	}
+	revokeForm := url.Values{"token": {rotated["refresh_token"].(string)}, "client_id": {client.ClientID}}
+	revokeResponse, err := server.client.Post(server.server.URL+"/oauth/revoke", "application/x-www-form-urlencoded", strings.NewReader(revokeForm.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	revokeResponse.Body.Close()
+	if revokeResponse.StatusCode != http.StatusOK {
+		t.Fatalf("revoke status=%d", revokeResponse.StatusCode)
+	}
+	request = httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	request.Header.Set("Authorization", "Bearer "+rotated["access_token"].(string))
+	if _, err := mcpUserFromRequest(server.app, request, config); err == nil {
+		t.Fatal("revoked access token remained valid")
+	}
 }
 
 func TestMCPUserFromRequestRequiresResourceBoundSignedToken(t *testing.T) {

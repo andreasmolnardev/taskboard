@@ -28,7 +28,7 @@ export function DetailLayout({ main, aside, asideLabel = 'Related information' }
 }
 
 export function MasterDetailLayout({ master, detail, masterLabel = 'Items', detailLabel = 'Selected item' }: { master: ReactNode; detail?: ReactNode; masterLabel?: string; detailLabel?: string }) {
-  return <div className="grid min-h-[32rem] overflow-hidden rounded-xl border md:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.5fr)]"><section aria-label={masterLabel} className="min-w-0 border-b p-4 md:border-r md:border-b-0">{master}</section><section aria-label={detailLabel} className="min-w-0 p-4">{detail ?? <p className="grid min-h-48 place-items-center text-sm text-muted-foreground">Choose an item to see its details.</p>}</section></div>;
+  return <div className="grid min-h-[32rem] md:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.5fr)]"><section aria-label={masterLabel} className="min-w-0">{master}</section><section aria-label={detailLabel} className="min-w-0">{detail ?? <p className="grid min-h-48 place-items-center text-sm text-muted-foreground">Choose an item to see its details.</p>}</section></div>;
 }
 
 export function CollectionLayout({ header, children, footer }: { header: ReactNode; children: ReactNode; footer?: ReactNode }) {

@@ -11,10 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andreasmolnardev/slopstack/go/ownership"
+	calendarengine "github.com/andreasmolnardev/taskboard/apps/server/internal/calendar"
 	ical "github.com/emersion/go-ical"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
-	calendarengine "github.com/slopstack/slopstack/apps/server/internal/calendar"
 )
 
 const (
@@ -92,11 +93,16 @@ func recurrenceOverrideRoute(event *core.RequestEvent) error {
 	if err != nil {
 		return event.BadRequestError(err.Error(), nil)
 	}
+	action := "update"
+	if record.IsNew() {
+		action = "create"
+	}
 	applyRecurrenceValues(record, master, input.Values)
 	record.Set("recurrence_cancelled", false)
 	if err := event.App.Save(record); err != nil {
 		return err
 	}
+	logRequestAudit(event, action, "events", record.Id, "recurrence-override-api")
 	return event.JSON(http.StatusOK, map[string]string{"id": record.Id, "recurrenceId": input.RecurrenceID})
 }
 
@@ -113,18 +119,23 @@ func recurrenceCancelRoute(event *core.RequestEvent) error {
 	if err != nil {
 		return event.BadRequestError(err.Error(), nil)
 	}
+	action := "update"
+	if record.IsNew() {
+		action = "create"
+	}
 	applyRecurrenceValues(record, master, nil)
 	record.Set("recurrence_cancelled", true)
 	record.Set("status", "CANCELLED")
 	if err := event.App.Save(record); err != nil {
 		return err
 	}
+	logRequestAudit(event, action, "events", record.Id, "recurrence-cancel-api")
 	return event.NoContent(http.StatusNoContent)
 }
 
 func prepareRecurrenceOverride(app core.App, owner, masterID, rawID string) (*core.Record, *core.Record, error) {
 	master, err := app.FindRecordById("events", masterID)
-	if err != nil || master.GetString("owner") != owner || master.GetString("recurrence_parent") != "" {
+	if err != nil || !ownership.IsOwner(master, "owner", owner) || master.GetString("recurrence_parent") != "" {
 		return nil, nil, fmt.Errorf("recurring event not found")
 	}
 	id, err := parseRecurrenceID(rawID)

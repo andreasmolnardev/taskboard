@@ -10,7 +10,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
 
-	"github.com/slopstack/slopstack/apps/server/internal/reminders"
+	"github.com/andreasmolnardev/taskboard/apps/server/internal/reminders"
 )
 
 func TestEnsureNotificationCollectionsIsSafeAndSetsOwnerRules(t *testing.T) {

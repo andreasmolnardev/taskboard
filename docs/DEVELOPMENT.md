@@ -8,17 +8,36 @@ cp .env.example .env
 pnpm generate:api
 pnpm generate:client
 pnpm dev
+pnpm config:check
 ```
+
+The Go module and web workspace package use Taskboard identities. The server
+entrypoint is `apps/server/cmd/taskboard`; Go builds use module
+`github.com/andreasmolnardev/taskboard`.
+
+Taskboard uses Slopstack's shared backup command, encrypted archive creation,
+PocketBase store adapter, and restore-archive cleanup. Taskboard configures that
+command to keep encrypted-only `backup create`, stdin key import, its
+`TASKBOARD_*` and legacy restore guards, and its existing `slopstack_restore_`
+temporary archive prefix. The JSON export format, scheduler, and retention
+policy remain app-owned.
+
+Taskboard pins the released Slopstack runtime v0.3.0 without a sibling-path
+`replace`. The shared runtime provides auth and permission helpers, backup
+primitives, audit recording, ownership hooks, and the Huma HTTP bridge; Taskboard
+retains its schemas, route handlers, DAV behavior, and domain rules. Update the
+runtime explicitly with `go get github.com/andreasmolnardev/slopstack@<version>`.
 
 Vite serves the web app on `5173`. Go and PocketBase serve the API on `8090`.
 
 ## Checks
 
 ```sh
-pnpm --filter @slopstack/web lint
-pnpm --filter @slopstack/web build
-pnpm --filter @slopstack/web test
+pnpm --filter @taskboard/web lint
+pnpm --filter @taskboard/web build
+pnpm --filter @taskboard/web test
 go test ./...
+pnpm compatibility:fixture
 ```
 
 ## Feature workflow

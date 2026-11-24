@@ -37,12 +37,20 @@ export function SearchTab({
   const [mode, setMode] = useState<'local' | 'deep'>('local');
   const [deepResults, setDeepResults] = useState<DeepResult[]>([]);
   const [localResults, setLocalResults] = useState<DeepResult[]>([]);
+  const [localComplete, setLocalComplete] = useState(false);
+
+  useEffect(() => {
+    setMode('local');
+    setDeepResults([]);
+  }, [query]);
 
   useEffect(() => {
     if (mode !== 'local') return;
     const queryText = query.trim();
+    setLocalComplete(false);
     if (!queryText) {
       setLocalResults([]);
+      setMode('local');
       return;
     }
     const controller = new AbortController();
@@ -66,11 +74,16 @@ export function SearchTab({
           };
         }),
       );
+      setLocalComplete(true);
     });
     return () => controller.abort();
   }, [mode, query]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (mode === 'local' && query.trim() && localComplete) setMode('deep');
+  }, [localComplete, mode, query]);
 
   useEffect(() => {
     if (mode !== 'deep' || !query.trim()) {
@@ -111,7 +124,7 @@ export function SearchTab({
     };
   }, [mode, query]);
 
-  const results = mode === 'local' ? localResults : deepResults;
+  const results = [...localResults, ...deepResults.filter((item) => !localResults.some((local) => local.id === item.id && local.type === item.type))];
   return (
     <CommandDialog
       open={open}
@@ -126,17 +139,9 @@ export function SearchTab({
         onValueChange={setQuery}
         placeholder="Search your entries"
       />
-      <div className="theme-toggle" role="group" aria-label="Search mode">
-        <button className={mode === 'local' ? 'active' : ''} onClick={() => setMode('local')}>
-          Local
-        </button>
-        <button className={mode === 'deep' ? 'active' : ''} onClick={() => setMode('deep')}>
-          Deep
-        </button>
-      </div>
       <CommandList>
         <CommandEmpty>{loading ? 'Searching…' : error || 'No entries found.'}</CommandEmpty>
-        <CommandGroup heading={mode === 'local' ? 'Loaded entries' : 'All results'}>
+        <CommandGroup heading="Search results">
           {results.map((entry) => (
             <CommandItem
               key={`${entry.type}-${entry.id}`}

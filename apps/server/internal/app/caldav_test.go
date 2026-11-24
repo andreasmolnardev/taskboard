@@ -179,6 +179,26 @@ func TestCalDAVResourceUsesStoredClientHref(t *testing.T) {
 	}
 }
 
+func TestCalDAVPreservesUnknownResourceProperties(t *testing.T) {
+	testApp, user, calendar := newCalendarTestApp(t)
+	defer testApp.Cleanup()
+	event := addOccurrenceEvent(t, testApp, map[string]any{
+		"owner": user.Id, "calendar": calendar.Id, "title": "Preserved", "uid": "preserved@example.com",
+		"start_date": "2026-09-13 09:00:00.000Z",
+	})
+	event.Set("dav_data", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\nBEGIN:VEVENT\r\nUID:preserved@example.com\r\nDTSTART:20260913T090000Z\r\nSUMMARY:Preserved\r\nX-CLIENT-FIELD:kept\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+	if err := testApp.Save(event); err != nil {
+		t.Fatal(err)
+	}
+	resource, err := makeCalDAVResource(event, "events", user.Id, calendar.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(resource.data), "X-CLIENT-FIELD:kept") {
+		t.Fatalf("unknown property was lost: %s", resource.data)
+	}
+}
+
 func TestCalDAVResourceUsesExistingICSRoundTrip(t *testing.T) {
 	testApp, user, calendar := newCalendarTestApp(t)
 	defer testApp.Cleanup()

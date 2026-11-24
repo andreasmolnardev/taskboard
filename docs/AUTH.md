@@ -5,7 +5,7 @@ PocketBase owns the auth lifecycle.
 ## Built-in flows
 
 - Login and logout.
-- Registration, controlled by `SLOPSTACK_REGISTRATION_ENABLED`.
+- Registration, controlled by `TASKBOARD_REGISTRATION_ENABLED` (with `SLOPSTACK_REGISTRATION_ENABLED` accepted as a legacy fallback).
 - Password reset.
 - Email verification.
 - Persistent auth tokens.

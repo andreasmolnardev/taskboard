@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/andreasmolnardev/taskboard/apps/server/internal/reminders"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/slopstack/slopstack/apps/server/internal/reminders"
 )
 
 func TestReminderListAndDeleteAreOwnerScoped(t *testing.T) {

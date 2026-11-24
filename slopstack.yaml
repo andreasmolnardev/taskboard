@@ -1,0 +1,34 @@
+# Taskboard deployment metadata. Keep credentials in environment variables or
+# mounted secret files.
+schemaVersion: 1
+
+app:
+  name: taskboard
+  goModule: github.com/andreasmolnardev/taskboard
+  envPrefix: TASKBOARD
+
+runtime:
+  port: 8090
+  storagePath: /app/pb_data
+
+development:
+  webPort: 5173
+  apiProxyTarget: http://127.0.0.1:8090
+
+tools:
+  go: 1.27.1
+  node: 22.23.2
+  pnpm: 11.8.0
+  air: 1.67.4
+  dockerBuildx: 0.30.0
+
+image:
+  repository: ghcr.io/andreasmolnardev/taskboard
+  tag: latest
+  platforms: linux/amd64,linux/arm64
+
+registry:
+  host: ghcr.io
+
+release:
+  version: 0.1.0

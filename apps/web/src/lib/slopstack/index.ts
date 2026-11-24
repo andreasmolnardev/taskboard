@@ -19,4 +19,5 @@ export * from './settings-runtime';
 export * from './background-operations';
 export * from './state-runtime';
 export * from './router-runtime';
+export * from './file-router';
 export * from './types';

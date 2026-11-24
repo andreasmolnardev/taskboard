@@ -2,6 +2,7 @@ import { offlineCollection } from '../../offline';
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   CalendarDays,
+  Copy,
   ChevronRight,
   Database,
   Download,
@@ -38,13 +39,13 @@ import {
   type WeekStart,
 } from '../../data';
 
-type SettingsSection = 'appearance' | 'account' | 'calendar' | 'dev';
+type SettingsSection = 'appearance' | 'account' | 'calendar' | 'integrations' | 'dev';
 type AccountModal = 'email' | 'password' | 'delete' | null;
 type SsoProvider = { name: string; displayName: string };
 type LinkedSsoAccount = { id: string; provider: string };
 const settingsSections: SettingsSection[] = import.meta.env.DEV
-  ? ['appearance', 'account', 'calendar', 'dev']
-  : ['appearance', 'account', 'calendar'];
+  ? ['appearance', 'account', 'calendar', 'integrations', 'dev']
+  : ['appearance', 'account', 'calendar', 'integrations'];
 
 export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const { theme, setTheme } = useTheme();
@@ -103,9 +104,16 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [appPasswordBusy, setAppPasswordBusy] = useState(false);
   const [appPasswordError, setAppPasswordError] = useState('');
+  const [apiTokens, setApiTokens] = useState<{ id: string; name: string; created: string }[]>([]);
+  const [apiTokenName, setApiTokenName] = useState('');
+  const [apiToken, setApiToken] = useState('');
+  const [apiTokenError, setApiTokenError] = useState('');
+  const [apiTokenBusy, setApiTokenBusy] = useState(false);
   const [mcpClients, setMcpClients] = useState<{ id: string; created: string; sessions: number }[]>([]);
   const [mcpClientError, setMcpClientError] = useState('');
   const [mcpClientBusy, setMcpClientBusy] = useState('');
+  const [mcpRedirectUri, setMcpRedirectUri] = useState('');
+  const [newMcpClientId, setNewMcpClientId] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailMessage, setEmailMessage] = useState('');
@@ -145,6 +153,16 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     const updateCustomTheme = () => setCustomTheme(readCustomTheme());
     window.addEventListener('taskboard-custom-theme-change', updateCustomTheme);
     return () => window.removeEventListener('taskboard-custom-theme-change', updateCustomTheme);
+  }, []);
+
+  useEffect(() => {
+    void apiFetch('/api/auth/api-tokens', { headers: { Authorization: `Bearer ${pb.authStore.token}` } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        return (await response.json()) as { id: string; name: string; created: string }[];
+      })
+      .then(setApiTokens)
+      .catch(() => setApiTokenError('Could not load API tokens.'));
   }, []);
 
   useEffect(() => {
@@ -281,6 +299,50 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       setAppPasswordError('Could not create app password.');
     } finally {
       setAppPasswordBusy(false);
+    }
+  };
+
+  const createApiToken = async () => {
+    setApiTokenBusy(true);
+    setApiTokenError('');
+    try {
+      const response = await apiFetch('/api/auth/api-tokens', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${pb.authStore.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: apiTokenName }),
+      });
+      if (!response.ok) throw new Error();
+      const created = (await response.json()) as { id: string; name: string; token: string; created: string };
+      setApiTokens((tokens) => [created, ...tokens]);
+      setApiToken(created.token);
+      setApiTokenName('');
+    } catch {
+      setApiTokenError('Could not create an API token.');
+    } finally {
+      setApiTokenBusy(false);
+    }
+  };
+
+  const revokeApiToken = async (id: string) => {
+    const response = await apiFetch(`/api/auth/api-tokens/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${pb.authStore.token}` } });
+    if (response.ok) setApiTokens((tokens) => tokens.filter((token) => token.id !== id));
+    else setApiTokenError('Could not revoke this API token.');
+  };
+
+  const createMcpClient = async () => {
+    setMcpClientError('');
+    setNewMcpClientId('');
+    try {
+      const response = await apiFetch('/oauth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ redirect_uris: [mcpRedirectUri.trim()] }),
+      });
+      if (!response.ok) throw new Error();
+      const client = (await response.json()) as { client_id: string };
+      setNewMcpClientId(client.client_id);
+    } catch {
+      setMcpClientError('Could not register the MCP client. Use an HTTPS callback URL or localhost for development.');
     }
   };
 
@@ -744,6 +806,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
           {import.meta.env.DEV && <TabsTrigger value="dev">Dev</TabsTrigger>}
         </TabsList>
       </Tabs>
@@ -1165,6 +1228,26 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
               </span>
             </div>
           </>
+        )}
+        {activeSection === 'integrations' && (
+          <div className="settings-section integrations-settings">
+            <div><h2>API tokens</h2><p>Create named bearer tokens for API tools. Secrets are shown once and can be revoked here.</p></div>
+            <div className="app-password-create"><input aria-label="API token name" value={apiTokenName} onChange={(event) => setApiTokenName(event.target.value)} placeholder="Name, for example automation" /><button className="button button-quiet" type="button" onClick={() => void createApiToken()} disabled={apiTokenBusy || !apiTokenName.trim()}>{apiTokenBusy ? 'Creating…' : 'Create API token'}</button></div>
+            {apiTokenError && <p className="form-error" role="alert">{apiTokenError}</p>}
+            {apiToken && <div className="new-app-password"><code>{apiToken}</code><button type="button" aria-label="Copy API token" onClick={() => void navigator.clipboard.writeText(apiToken)}><Copy size={15} /></button><p>Copy now. Revoke it below when it is no longer needed.</p></div>}
+            {apiTokens.map((token) => <div className="app-password-row" key={token.id}><span>{token.name} · {new Date(token.created).toLocaleDateString()}</span><button type="button" aria-label={`Revoke API token ${token.name}`} onClick={() => void revokeApiToken(token.id)}><Trash2 size={14} /></button></div>)}
+            <div><h2>MCP credentials</h2><p>Connected MCP apps use OAuth credentials and can be revoked here.</p></div>
+            <div className="app-password-create"><input aria-label="MCP OAuth redirect URL" type="url" value={mcpRedirectUri} onChange={(event) => setMcpRedirectUri(event.target.value)} placeholder="https://app.example/oauth/callback" /><button className="button button-quiet" type="button" onClick={() => void createMcpClient()} disabled={!mcpRedirectUri.trim()}>Create MCP client</button></div>
+            {newMcpClientId && <p className="new-app-password">MCP client ID: <code>{newMcpClientId}</code></p>}
+            {mcpClientError && <p className="form-error" role="alert">{mcpClientError}</p>}
+            {mcpClients.length === 0 ? <p>No active MCP clients.</p> : mcpClients.map((client) => <div className="app-password-row" key={client.id}><span><code>{client.id}</code> · {client.sessions} active sessions</span><button type="button" aria-label={`Revoke MCP client ${client.id}`} disabled={mcpClientBusy === client.id} onClick={() => void revokeMCPClient(client.id)}><Trash2 size={14} /></button></div>)}
+            <div><h2>CalDAV credentials</h2><p>Generate an app password for CalDAV and CardDAV clients. It is shown only once.</p></div>
+            <div className="app-password-create"><input aria-label="CalDAV credential name" value={newPasswordName} onChange={(event) => setNewPasswordName(event.target.value)} placeholder="Name, for example phone" /><button className="button button-quiet" type="button" onClick={() => void createAppPassword()} disabled={appPasswordBusy}>{appPasswordBusy ? 'Creating…' : 'Create CalDAV credential'}</button></div>
+            {newPassword && <p className="new-app-password"><code>{newPassword}</code></p>}
+            {appPasswordError && <p className="form-error" role="alert">{appPasswordError}</p>}
+            {appPasswords.map((password) => <div className="app-password-row" key={password.id}><span>{password.name}</span><button type="button" aria-label={`Revoke CalDAV credential ${password.name}`} onClick={() => void revokeAppPassword(password.id)}><Trash2 size={14} /></button></div>)}
+            <div className="sync-urls"><label>CalDAV server URL<code>{caldavBaseUrl}</code></label><label>CardDAV server URL<code>{carddavBaseUrl}</code></label></div>
+          </div>
         )}
         {import.meta.env.DEV && activeSection === 'dev' && (
           <div className="settings-section">

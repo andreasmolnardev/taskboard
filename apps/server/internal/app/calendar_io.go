@@ -2,16 +2,14 @@ package app
 
 import (
 	"bytes"
-	"encoding/base64"
+	"context"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
+	"github.com/andreasmolnardev/slopstack/go/ownership"
 	ical "github.com/emersion/go-ical"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
@@ -22,121 +20,18 @@ const (
 	calendarDataVersion   = 1
 )
 
-type storedCalendarData struct {
-	Version    int                    `json:"version"`
-	Properties map[string][]ical.Prop `json:"properties,omitempty"`
-	Components []*ical.Component      `json:"components,omitempty"`
-}
-
-func registerCalendarIORoutes(e *core.ServeEvent) {
-	e.Router.POST("/api/calendars/import", importCalendar)
-	e.Router.POST("/api/calendars/import-caldav", importCalDAVOnce)
-	e.Router.GET("/api/calendars/{id}/export.ics", exportCalendar)
-}
-
-type calDAVImportRequest struct {
-	URL      string `json:"url"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Calendar string `json:"calendar"`
-}
-
-func importCalDAVOnce(event *core.RequestEvent) error {
-	if event.Auth == nil {
-		return event.UnauthorizedError("authentication required", nil)
-	}
-	var input calDAVImportRequest
-	if err := json.NewDecoder(http.MaxBytesReader(event.Response, event.Request.Body, 16<<10)).Decode(&input); err != nil {
-		return event.BadRequestError("invalid import request", err)
-	}
-	parsed, err := url.Parse(strings.TrimSpace(input.URL))
-	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.User != nil {
-		return event.BadRequestError("enter a valid CalDAV calendar URL", nil)
-	}
-	if err := validateImportCalendar(event.App, event.Auth.Id, input.Calendar); err != nil {
-		return event.BadRequestError("calendar not found", err)
-	}
-	if err := ensureCalDAVImports(event.App); err != nil {
-		return event.InternalServerError("could not check import status", err)
-	}
-	if _, err := event.App.FindFirstRecordByFilter("caldav_imports", "owner = {:owner}", dbx.Params{"owner": event.Auth.Id}); err == nil {
-		return event.BadRequestError("CalDAV import was already completed", nil)
-	}
-	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	body := `<?xml version="1.0"?><c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"/></c:comp-filter></c:filter></c:calendar-query>`
-	req, err := http.NewRequest("REPORT", parsed.String(), strings.NewReader(body))
-	if err != nil {
-		return event.BadRequestError("invalid CalDAV URL", err)
-	}
-	req.Header.Set("Content-Type", "application/xml; charset=utf-8")
-	req.Header.Set("Depth", "1")
-	if input.Username != "" {
-		req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(input.Username+":"+input.Password)))
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return event.BadRequestError("could not connect to CalDAV server", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusMultiStatus && resp.StatusCode != http.StatusOK {
-		return event.BadRequestError(fmt.Sprintf("CalDAV server returned %s", resp.Status), nil)
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCalendarImportSize+1))
-	if err != nil || len(data) > maxCalendarImportSize {
-		return event.BadRequestError("CalDAV response is too large", err)
-	}
-	var result struct {
-		Responses []struct {
-			Props []struct {
-				Data string `xml:"calendar-data"`
-			} `xml:"propstat>prop"`
-		} `xml:"response"`
-	}
-	if err := xml.Unmarshal(data, &result); err != nil {
-		return event.BadRequestError("invalid CalDAV response", err)
-	}
-	count := 0
-	for _, response := range result.Responses {
-		for _, prop := range response.Props {
-			if strings.TrimSpace(prop.Data) == "" {
-				continue
-			}
-			cal, err := ical.NewDecoder(strings.NewReader(prop.Data)).Decode()
-			if err != nil {
-				return event.BadRequestError("server returned invalid iCalendar data", err)
-			}
-			for _, comp := range cal.Children {
-				if comp.Name == ical.CompEvent {
-					if err := saveImportedEvent(event.App, event.Auth.Id, input.Calendar, comp); err != nil {
-						return event.BadRequestError("could not import CalDAV event", err)
-					}
-					count++
-				}
-			}
-		}
-	}
-	collection, err := event.App.FindCollectionByNameOrId("caldav_imports")
-	if err != nil {
-		return event.InternalServerError("could not load import status", err)
-	}
-	marker := core.NewRecord(collection)
-	marker.Set("owner", event.Auth.Id)
-	marker.Set("source", parsed.String())
-	marker.Set("imported", count)
-	if err := event.App.Save(marker); err != nil {
-		return event.InternalServerError("could not save import status", err)
-	}
-	return event.JSON(http.StatusOK, map[string]int{"imported": count})
-}
-
 func ensureCalDAVImports(app core.App) error {
 	c, err := app.FindCollectionByNameOrId("caldav_imports")
 	if err != nil {
 		c = core.NewBaseCollection("caldav_imports")
 	}
-	for _, f := range []core.Field{&core.TextField{Name: "owner", Required: true}, &core.TextField{Name: "source", Required: true}, &core.NumberField{Name: "imported", OnlyInt: true}} {
-		if c.Fields.GetByName(f.GetName()) == nil {
-			c.Fields.Add(f)
+	for _, field := range []core.Field{
+		&core.TextField{Name: "owner", Required: true},
+		&core.TextField{Name: "source", Required: true},
+		&core.NumberField{Name: "imported", OnlyInt: true},
+	} {
+		if c.Fields.GetByName(field.GetName()) == nil {
+			c.Fields.Add(field)
 		}
 	}
 	ownerRule := "@request.auth.id = owner"
@@ -151,7 +46,20 @@ func ensureCalDAVImports(app core.App) error {
 	return app.Save(c)
 }
 
-func EnsureCalDAVImports(app core.App) error { return ensureCalDAVImports(app) }
+func EnsureCalDAVImports(app core.App) error {
+	return ensureCalDAVImports(app)
+}
+
+type storedCalendarData struct {
+	Version    int                    `json:"version"`
+	Properties map[string][]ical.Prop `json:"properties,omitempty"`
+	Components []*ical.Component      `json:"components,omitempty"`
+}
+
+func registerCalendarIORoutes(e *core.ServeEvent) {
+	e.Router.POST("/api/calendars/import", importCalendar)
+	e.Router.GET("/api/calendars/{id}/export.ics", exportCalendar)
+}
 
 func importCalendar(event *core.RequestEvent) error {
 	if event.Auth == nil {
@@ -268,7 +176,15 @@ func saveImportedEventForDAV(app core.App, userID, calendarID string, component 
 	if davHref != "" {
 		record.Set("dav_href", davHref)
 	}
-	return app.Save(record)
+	action := "update"
+	if record.IsNew() {
+		action = "create"
+	}
+	if err := app.Save(record); err != nil {
+		return err
+	}
+	logAuditMutation(context.Background(), app, userID, action, "events", record.Id, "calendar-sync")
+	return nil
 }
 
 func saveImportedTodo(app core.App, userID, listID string, component *ical.Component) error {
@@ -350,12 +266,20 @@ func saveImportedTodoForTarget(app core.App, userID, targetField, targetID strin
 	if davHref != "" {
 		record.Set("dav_href", davHref)
 	}
-	return app.Save(record)
+	action := "update"
+	if record.IsNew() {
+		action = "create"
+	}
+	if err := app.Save(record); err != nil {
+		return err
+	}
+	logAuditMutation(context.Background(), app, userID, action, "todos", record.Id, "calendar-sync")
+	return nil
 }
 
 func validateImportCalendar(app core.App, userID, calendarID string) error {
 	calendar, err := app.FindRecordById("calendars", calendarID)
-	if err != nil || calendar.GetString("owner") != userID {
+	if err != nil || !ownership.IsOwner(calendar, "owner", userID) {
 		return fmt.Errorf("calendar not found")
 	}
 	return nil
@@ -363,7 +287,7 @@ func validateImportCalendar(app core.App, userID, calendarID string) error {
 
 func validateImportList(app core.App, userID, listID string) error {
 	list, err := app.FindRecordById("lists", listID)
-	if err != nil || list.GetString("owner") != userID {
+	if err != nil || !ownership.IsOwner(list, "owner", userID) {
 		return fmt.Errorf("list not found")
 	}
 	return nil
@@ -484,7 +408,7 @@ func exportCalendar(event *core.RequestEvent) error {
 		return event.UnauthorizedError("authentication required", nil)
 	}
 	calendar, err := event.App.FindRecordById("calendars", event.Request.PathValue("id"))
-	if err != nil || calendar.GetString("owner") != event.Auth.Id {
+	if err != nil || !ownership.IsOwner(calendar, "owner", event.Auth.Id) {
 		return event.NotFoundError("calendar not found", nil)
 	}
 	output, err := buildCalendarExport(event.App, event.Auth.Id, calendar.Id)

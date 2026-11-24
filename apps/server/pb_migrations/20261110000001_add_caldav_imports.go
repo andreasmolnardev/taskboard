@@ -1,8 +1,8 @@
 package migrations
 
 import (
+	"github.com/andreasmolnardev/taskboard/apps/server/internal/app"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/slopstack/slopstack/apps/server/internal/app"
 )
 
 func init() {

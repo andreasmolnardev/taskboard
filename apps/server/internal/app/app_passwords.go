@@ -111,6 +111,7 @@ func registerAppPasswordRoutes(e *core.ServeEvent) {
 		if err := event.App.Save(record); err != nil {
 			return err
 		}
+		logRequestAudit(event, "create", appPasswordCollection, record.Id, "app-password-api")
 		return event.JSON(http.StatusCreated, map[string]any{"id": record.Id, "name": record.GetString("name"), "secret": secret})
 	})
 
@@ -125,6 +126,7 @@ func registerAppPasswordRoutes(e *core.ServeEvent) {
 		if err := event.App.Delete(record); err != nil {
 			return err
 		}
+		logRequestAudit(event, "delete", appPasswordCollection, record.Id, "app-password-api")
 		return event.NoContent(http.StatusNoContent)
 	})
 }

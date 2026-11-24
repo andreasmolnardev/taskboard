@@ -10,11 +10,11 @@ import { OfflineStatus } from './components/app/offline-status';
 import { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { OfflineRecord as RecordModel } from './offline';
-import { useNavigate, useRouterState } from '@tanstack/react-router';
+import { useNavigate, useRouterState } from './router';
 import { useTheme } from 'next-themes';
 import type { SidebarTab } from './components/sidebar';
 import { taskboardAuth, taskboardShell } from './application';
-import { renderView, resolveView, runAction, useAuthentication } from './lib/slopstack';
+import { FileRouteOutlet, resolveFileRoute, resolveView, runAction, useAuthentication } from './lib/slopstack';
 import { TaskboardViewsProvider } from './views/taskboard-views';
 import { createTaskAction, taskboardApplication } from './application';
 import { pb } from './api/pocketbase';
@@ -25,6 +25,7 @@ import { AdminSsoPage } from './components/app/admin-sso-page';
 import { CreateComposer } from './components/app/create-composer';
 import { NotificationsPopover } from './components/app/notifications-popover';
 import { applyCustomTheme, readCustomTheme } from './theme';
+import { fileRouteModules, fileRoutes } from './route-definitions';
 
 function compactLocalParts(value: unknown) {
   const match = String(value ?? '').match(/^(\\d{4})(\\d{2})(\\d{2})(?:T(\\d{2})(\\d{2}))?/);
@@ -486,17 +487,16 @@ export function App() {
       setComposerOpen(true);
     },
   };
+  const fileRoute = resolveFileRoute(fileRoutes, fileRouteModules, {
+    pathname,
+    search: new URLSearchParams(window.location.search),
+    navigate: (to, options) => void navigate({ to, replace: options?.replace }),
+  });
   const content = activeView ? (
     <TaskboardViewsProvider value={bindings}>
-      {renderView(activeView, {
-        params: {},
-        search: new URLSearchParams(window.location.search),
-        navigate: (to) => {
-          window.history.pushState({}, '', to);
-        },
-      })}
+      <FileRouteOutlet resolution={fileRoute} />
     </TaskboardViewsProvider>
-  ) : null;
+  ) : <FileRouteOutlet resolution={fileRoute} />;
 
   if (offlineReadyUser !== authUserId) {
     return (

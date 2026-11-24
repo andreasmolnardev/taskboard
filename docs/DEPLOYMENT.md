@@ -6,14 +6,76 @@
 docker compose up --build
 ```
 
-PocketBase data persists in the `slopstack-data` volume.
+PocketBase data persists in the existing `slopstack-data` volume. Keep this volume name when upgrading an existing Compose deployment.
+
+`slopstack.yaml` follows the canonical schema v1 and records Taskboard's
+identity, environment prefix, runtime defaults, tool versions, image targets,
+and release version. Check it with `pnpm config:check` before changing
+deployment settings. Keep credentials in environment variables or mounted
+secret files.
+
+Preview a multi-platform Buildx build with:
+
+```sh
+pnpm deploy
+```
+
+This is a dry run. It prints the command and does not build or push. The Go
+build downloads the pinned Slopstack runtime from the Go module proxy; a sibling
+Slopstack checkout is not required. After reviewing the command and configuring
+Docker credentials, `pnpm deploy --push` executes it and pushes the configured
+image.
+
+Plan a release version change with:
+
+```sh
+pnpm release --version 1.2.3
+```
+
+This is also a dry run. `pnpm release --version 1.2.3 --apply` updates only
+`release.version` and `image.tag` in `slopstack.yaml`; it creates no Git tag and
+does not publish an image or release. Review and commit the metadata update,
+then deploy separately.
+
+Export a multi-platform OCI archive for offline transfer or inspection with:
+
+```sh
+pnpm deploy --export ./taskboard-image.tar
+```
+
+The command checks that the installed Docker Buildx version matches
+`tools.dockerBuildx` in `slopstack.yaml` before building. Keep enough disk space
+for the full archive.
+
+Compose and the image both check PocketBase's `/api/health` endpoint. Compose
+allows 30 seconds for the process to stop so PocketBase can close cleanly.
 
 ## Required production settings
 
-- Set `SLOPSTACK_PUBLIC_URL` to the public origin.
-- Set `SLOPSTACK_SECURE_COOKIES=true` behind HTTPS.
-- Set a durable `SLOPSTACK_STORAGE_PATH`.
+- Set `TASKBOARD_PUBLIC_URL` to the public origin.
+- Set a durable `TASKBOARD_STORAGE_PATH`.
+- Existing deployments may continue to set `SLOPSTACK_*`; matching `TASKBOARD_*` variables take precedence.
+- Compose retains the existing `slopstack-data` volume and `/app/pb_data` mount so existing data stays at the same location.
 - Keep PocketBase data outside ephemeral container storage.
+
+### Reverse proxy
+
+Terminate TLS at a trusted reverse proxy and forward the original host and
+protocol to Taskboard. For Caddy, a minimal site is:
+
+```caddyfile
+tasks.example.com {
+    reverse_proxy 127.0.0.1:8090
+}
+```
+
+Set `TASKBOARD_PUBLIC_URL=https://tasks.example.com`. Keep PocketBase bound to a
+private interface or container network; do not expose port 8090 directly to the
+internet. The proxy must support WebSocket upgrades and pass `Host`,
+`X-Forwarded-For`, and `X-Forwarded-Proto` headers, overwriting forwarded
+values supplied by clients. With the included Compose file and a host-level
+Caddy instance, bind the published port to localhost
+(`127.0.0.1:8090:8090`).
 
 ## Backups
 
@@ -22,21 +84,21 @@ Scheduled backups use PocketBase's transaction-safe backup engine. Docker enable
 Set these values to change the schedule:
 
 ```sh
-SLOPSTACK_BACKUP_ENABLED=true
-SLOPSTACK_BACKUP_CRON="0 3 * * *"
-SLOPSTACK_BACKUP_MAX_KEEP=14
+TASKBOARD_BACKUP_ENABLED=true
+TASKBOARD_BACKUP_CRON="0 3 * * *"
+TASKBOARD_BACKUP_MAX_KEEP=14
 ```
 
 Local archives share the same storage volume as the live database. This protects against bad writes, but not disk or volume loss. Production systems should use private S3-compatible storage:
 
 ```sh
-SLOPSTACK_BACKUP_S3_ENABLED=true
-SLOPSTACK_BACKUP_S3_BUCKET=taskboard-backups
-SLOPSTACK_BACKUP_S3_REGION=us-east-1
-SLOPSTACK_BACKUP_S3_ENDPOINT=https://s3.example.com
-SLOPSTACK_BACKUP_S3_ACCESS_KEY=...
-SLOPSTACK_BACKUP_S3_SECRET=...
-SLOPSTACK_BACKUP_S3_FORCE_PATH_STYLE=false
+TASKBOARD_BACKUP_S3_ENABLED=true
+TASKBOARD_BACKUP_S3_BUCKET=taskboard-backups
+TASKBOARD_BACKUP_S3_REGION=us-east-1
+TASKBOARD_BACKUP_S3_ENDPOINT=https://s3.example.com
+TASKBOARD_BACKUP_S3_ACCESS_KEY=...
+TASKBOARD_BACKUP_S3_SECRET=...
+TASKBOARD_BACKUP_S3_FORCE_PATH_STYLE=false
 ```
 
 Use a private bucket, TLS, a dedicated least-privilege key, versioning, and server-side encryption. Keep credentials in the deployment secret store. Do not commit them.
@@ -44,9 +106,9 @@ Use a private bucket, TLS, a dedicated least-privilege key, versioning, and serv
 Use the server CLI for manual backup work. These commands use the configured local or S3 backup store:
 
 ```sh
-slopstack backup create
-slopstack backup list
-slopstack backup restore <exact-name-from-list> --confirm
+taskboard backup create
+taskboard backup list
+taskboard backup restore <exact-name-from-list> --confirm
 ```
 
 `backup create` prints the new archive name. `backup restore` rejects paths and other unsafe names, requires an exact archive name, and will not run without `--confirm`. Restore replaces the live PocketBase data and restarts the process. Stop traffic and other app instances first. There is no app HTTP restore endpoint.
@@ -55,54 +117,45 @@ Keep at least twice the data size free during backup and restore. Restore a copy
 
 ### Safe restore drill
 
-Run the repository smoke test after the service is built and backup storage is configured:
+Run the disposable-fixture compatibility check:
+
+```sh
+pnpm compatibility:fixture
+```
+
+This checks the Go module identity, builds the CLI into a temporary directory,
+creates a new PocketBase database there, initializes a fixture-only recovery
+key, writes an encrypted archive, and restores it. The script disables S3 for
+its subprocesses and removes only its own temporary directory on exit. It does
+not mount the Compose volume or contact the configured backup store. Use it
+after changes to backup encryption or module identity. CI runs it using the
+published Slopstack module version pinned in `go.mod`.
+
+The legacy smoke-test path delegates to the same disposable fixture check:
 
 ```sh
 ./scripts/backup-restore-smoke-test.sh
 ```
 
-The script creates a manual archive, then restores it into a temporary data directory through a one-off container. It never restores the live `slopstack-data` volume. With the compose defaults it stages the local archive automatically; when local storage has no copy, the isolated restore uses the configured S3-compatible store. The new manual archive remains in the configured backup store for normal retention cleanup.
+The check needs the pinned Go toolchain and temporary disk space. It does not
+need Docker credentials or production backup credentials.
 
-For a different Compose file or service name, set `COMPOSE_FILE` or `BACKUP_COMPOSE_SERVICE`:
+Before release, run the disposable fixture check on each supported platform.
+Startup validates backup cron and retention settings before running application
+migrations. Take and verify an encrypted backup before deploying a new version;
+the startup check cannot protect against an application migration defect.
 
-```sh
-COMPOSE_FILE=/path/to/docker-compose.yml BACKUP_COMPOSE_SERVICE=slopstack ./scripts/backup-restore-smoke-test.sh
-```
-
-The drill needs Docker access and enough temporary disk space for the restored data. Do not put credentials in the script or command line; provide S3 credentials through the deployment secret store as described above.
+For an application upgrade, first stop any older Taskboard instances that share
+the data volume, create and verify an encrypted backup, then start the new image
+with the same persistent volume. Keep the old image available until health
+checks and a smoke test pass. Never run two versions against the same
+PocketBase data directory during a migration.
 
 ## Frontend
 
-The frontend is a static Vite build. The Go runtime serves the build from `SLOPSTACK_WEB_PATH` (default `public`); the Docker image puts it there. Client routes fall back to `index.html`, while API and DAV routes keep their own responses. If hosting the frontend elsewhere, keep `/api` proxied to the Go runtime or set `VITE_API_URL` to the deployed API origin. See [offline use and sync](OFFLINE.md) for PWA setup and rollout.
-
-## Upgrades and rollback
-
-Use a tagged release or a pinned image digest. Avoid deploying `latest`, so the exact prior app build is known. Run one app instance while PocketBase migrations run; do not start a new release beside the old instance against the same data directory.
-
-Before each release:
-
-1. Read the release notes and check for required configuration or manual steps.
-2. Confirm the latest off-host backup is present. Create a manual backup with `slopstack backup create` and record the exact archive name.
-3. Record the currently deployed release tag or image digest. Plan a maintenance window if the release changes schema or causes downtime.
-4. Stop new traffic, then stop the app before replacing its image or binary.
-
-For a source checkout using this repository's Compose file, build the release while the current service is still running, then stop and replace it:
-
-```sh
-git checkout <release-tag>
-docker compose build slopstack
-docker compose stop slopstack
-docker compose up -d --no-deps slopstack
-```
-
-PocketBase applies registered migrations during startup. Watch startup logs until migrations finish, then check the health endpoint and sign in. Smoke test create, edit, delete, search, import/export, and any CalDAV or CardDAV clients you use before reopening traffic.
-
-### Roll back
-
-First stop traffic and stop the app. If the migration was explicitly designed to keep the prior release compatible, redeploy the recorded prior image and start one instance. Check the health endpoint and verify data before reopening traffic.
-
-For a source checkout, use the same Compose steps with the recorded prior release tag.
-
-If the prior release cannot use the new schema, restore the pre-upgrade backup instead of trying to reverse an applied migration. Keep the app stopped, select the exact archive recorded before the upgrade, and use the documented `slopstack backup restore <archive> --confirm` CLI. Then deploy the prior app release and start it once. Restoring replaces current data, including writes made after that backup. Test the restore on an isolated copy first when possible.
-
-Treat migrations as forward-only in production: never edit an applied migration or assume its down function is a safe release rollback. Add a new migration for later schema changes. Keep the app release, migration code, and backup archive together in the release notes so the operator can identify a compatible rollback path.
+The frontend is a static Vite build copied into the image and served by the Go
+runtime. `TASKBOARD_PUBLIC_DIR` selects the static directory and defaults to
+`public`; client-side routes fall back to `index.html`, while API, DAV, and admin
+paths remain backend-owned. During development, Vite serves the frontend and
+proxies `/api` to PocketBase. Set `VITE_API_URL` when the API uses a different
+public origin.

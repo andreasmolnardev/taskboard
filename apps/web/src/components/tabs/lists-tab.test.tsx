@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../entry-row', () => ({ EntryRow: () => null }));
+vi.mock('../../offline', () => ({ offlineCollection: vi.fn() }));
 
 import { lists } from '../../data';
 import { ListsTab } from './lists-tab';

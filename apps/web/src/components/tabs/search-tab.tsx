@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, Check } from 'lucide-react';
 import {
   CommandDialog,
@@ -9,10 +8,11 @@ import {
   CommandItem,
   CommandList,
 } from '../ui/command';
-import { apiJson } from '../../api/client';
+import { apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
-import { taskboardQueryKeys } from '../../api/query-keys';
-import { entries } from '../../data';
+import { entries, lists } from '../../data';
+import { taskboardSearchProvider } from '../../application';
+import { MarkdownContent } from '../markdown';
 
 type DeepResult = {
   id: string;
@@ -35,36 +35,96 @@ export function SearchTab({
 }) {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<'local' | 'deep'>('local');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [deepResults, setDeepResults] = useState<DeepResult[]>([]);
+  const [localResults, setLocalResults] = useState<DeepResult[]>([]);
+  const [localComplete, setLocalComplete] = useState(false);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedQuery(query.trim());
-    }, 250);
-    return () => window.clearTimeout(timer);
+    setMode('local');
+    setDeepResults([]);
   }, [query]);
 
-  const userId = pb.authStore.record?.id ?? '';
-  const params = new URLSearchParams({ query: debouncedQuery, perPage: '50' });
-  const deepSearch = useQuery({
-    queryKey: taskboardQueryKeys.search(userId, debouncedQuery),
-    enabled: open && mode === 'deep' && Boolean(userId && debouncedQuery),
-    queryFn: ({ signal }) =>
-      apiJson<{ items: DeepResult[] }>(`/api/search?${params}`, { signal }),
-  });
-  const loading = mode === 'deep' && deepSearch.isFetching;
-  const error = mode === 'deep' && deepSearch.error instanceof Error ? deepSearch.error.message : '';
+  useEffect(() => {
+    if (mode !== 'local') return;
+    const queryText = query.trim();
+    setLocalComplete(false);
+    if (!queryText) {
+      setLocalResults([]);
+      setMode('local');
+      return;
+    }
+    const controller = new AbortController();
+    void taskboardSearchProvider.search(queryText, controller.signal).then((matches) => {
+      if (controller.signal.aborted) return;
+      setLocalResults(
+        matches.map((match) => {
+          const entry = entries.find((item) => item.id === match.id);
+          const container = lists.find((item) => item.id === match.id);
+          return {
+            id: match.id,
+            type:
+              entry?.type === 'task'
+                ? 'todo'
+                : entry?.type === 'event'
+                  ? 'event'
+                  : (container?.kind ?? 'list'),
+            title: match.title,
+            description: match.description,
+            container: entry?.list,
+          };
+        }),
+      );
+      setLocalComplete(true);
+    });
+    return () => controller.abort();
+  }, [mode, query]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const results =
-    mode === 'local'
-      ? entries.map((entry) => ({
-          id: entry.id,
-          type: entry.type === 'task' ? ('todo' as const) : ('event' as const),
-          title: entry.title,
-          description: entry.description,
-          container: entry.list,
-        }))
-      : deepSearch.data?.items ?? [];
+  useEffect(() => {
+    if (mode === 'local' && query.trim() && localComplete) setMode('deep');
+  }, [localComplete, mode, query]);
+
+  useEffect(() => {
+    if (mode !== 'deep' || !query.trim()) {
+      setDeepResults([]);
+      setError('');
+      return;
+    }
+    const controller = new AbortController();
+    if (!navigator.onLine) {
+      setDeepResults([]);
+      setError('Deep search needs a connection. Use local search offline.');
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError('');
+      const params = new URLSearchParams({ query: query.trim(), perPage: '50' });
+      void apiFetch(`/api/search?${params}`, {
+        headers: { Authorization: `Bearer ${pb.authStore.token}` },
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          if (!response.ok) throw new Error('Deep search failed.');
+          return (await response.json()) as { items: DeepResult[] };
+        })
+        .then((response) => setDeepResults(response.items))
+        .catch((reason: unknown) => {
+          if (!controller.signal.aborted)
+            setError(reason instanceof Error ? reason.message : 'Deep search failed.');
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [mode, query]);
+
+  const results = [...localResults, ...deepResults.filter((item) => !localResults.some((local) => local.id === item.id && local.type === item.type))];
   return (
     <CommandDialog
       open={open}
@@ -79,17 +139,9 @@ export function SearchTab({
         onValueChange={setQuery}
         placeholder="Search your entries"
       />
-      <div className="theme-toggle" role="group" aria-label="Search mode">
-        <button className={mode === 'local' ? 'active' : ''} onClick={() => setMode('local')}>
-          Local
-        </button>
-        <button className={mode === 'deep' ? 'active' : ''} onClick={() => setMode('deep')}>
-          Deep
-        </button>
-      </div>
       <CommandList>
         <CommandEmpty>{loading ? 'Searching…' : error || 'No entries found.'}</CommandEmpty>
-        <CommandGroup heading={mode === 'local' ? 'Loaded entries' : 'All results'}>
+        <CommandGroup heading="Search results">
           {results.map((entry) => (
             <CommandItem
               key={`${entry.type}-${entry.id}`}
@@ -101,7 +153,7 @@ export function SearchTab({
               </span>
               <span className="command-entry-copy">
                 <strong>{entry.title}</strong>
-                <small>{entry.description || entry.type}</small>
+                {entry.description ? <MarkdownContent value={entry.description} /> : <small>{entry.type}</small>}
               </span>
               <span className="command-entry-list">{entry.container}</span>
             </CommandItem>

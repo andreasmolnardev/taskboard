@@ -25,7 +25,7 @@ type httpIntegrationServer struct {
 	client *http.Client
 }
 
-func newHTTPIntegrationServer(t *testing.T) *httpIntegrationServer {
+func newHTTPIntegrationServer(t *testing.T, configs ...Config) *httpIntegrationServer {
 	t.Helper()
 
 	pb := pocketbase.NewWithConfig(pocketbase.Config{
@@ -34,7 +34,11 @@ func newHTTPIntegrationServer(t *testing.T) *httpIntegrationServer {
 		DefaultEncryptionEnv: "pb_test_env",
 	})
 	api := humago.New(http.NewServeMux(), huma.DefaultConfig("Taskboard test API", "test"))
-	if err := Register(pb, Config{RegistrationMode: RegistrationApproval}, api); err != nil {
+	config := Config{RegistrationMode: RegistrationApproval}
+	if len(configs) > 0 {
+		config = configs[0]
+	}
+	if err := Register(pb, config, api); err != nil {
 		t.Fatal(err)
 	}
 	if err := pb.Bootstrap(); err != nil {

@@ -1,8 +1,11 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { offlineCollection } from '../../offline';
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   CalendarDays,
+  Copy,
   ChevronRight,
   Database,
+  Download,
   Monitor,
   Moon,
   Palette,
@@ -22,6 +25,8 @@ import {
   type CustomTheme,
 } from '../../theme';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
+import { createSettingsStore, useSettings } from '../../lib/slopstack';
+import { taskboardSettings } from '../../application';
 import { ContainerManager, type ManagedContainer } from '../container-manager';
 import {
   accentColors,
@@ -34,17 +39,44 @@ import {
   type WeekStart,
 } from '../../data';
 
-type SettingsSection = 'appearance' | 'account' | 'calendar' | 'dev';
-type AccountModal = 'email' | 'password' | null;
+type SettingsSection = 'appearance' | 'account' | 'calendar' | 'integrations' | 'dev';
+type AccountModal = 'email' | 'password' | 'delete' | null;
 type SsoProvider = { name: string; displayName: string };
 type LinkedSsoAccount = { id: string; provider: string };
 const settingsSections: SettingsSection[] = import.meta.env.DEV
-  ? ['appearance', 'account', 'calendar', 'dev']
-  : ['appearance', 'account', 'calendar'];
+  ? ['appearance', 'account', 'calendar', 'integrations', 'dev']
+  : ['appearance', 'account', 'calendar', 'integrations'];
 
 export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const { theme, setTheme } = useTheme();
   const userId = pb.authStore.record?.id ?? 'anonymous';
+  const settingsStore = useMemo(
+    () =>
+      createSettingsStore(taskboardSettings, {
+        async load() {
+          return {
+            weekStart: getWeekStart(),
+            accentColor:
+              localStorage.getItem(`taskboard-accent-${userId}`) ?? accentColors[0].value,
+            fontSize: fontSizes.some(
+              (option) => option.value === localStorage.getItem(`taskboard-font-size-${userId}`),
+            )
+              ? (localStorage.getItem(`taskboard-font-size-${userId}`) as FontSize)
+              : 'medium',
+          };
+        },
+        async save(value) {
+          localStorage.setItem(weekStartStorageKey, String(value.weekStart));
+          localStorage.setItem(`taskboard-accent-${userId}`, String(value.accentColor));
+          localStorage.setItem(`taskboard-font-size-${userId}`, String(value.fontSize));
+        },
+      }),
+    [userId],
+  );
+  const settingsSnapshot = useSettings(settingsStore);
+  useEffect(() => {
+    void settingsStore.load();
+  }, [settingsStore]);
   const accentStorageKey = `taskboard-accent-${userId}`;
   const fontSizeStorageKey = `taskboard-font-size-${userId}`;
   const [accentColor, setAccentColor] = useState(
@@ -63,12 +95,25 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [importedCalendars, setImportedCalendars] = useState<string[]>([]);
   const [calendarIOError, setCalendarIOError] = useState('');
   const [calendarIOBusy, setCalendarIOBusy] = useState(false);
+  const [calDavSource, setCalDavSource] = useState('');
+  const [calDavUsername, setCalDavUsername] = useState('');
+  const [calDavPassword, setCalDavPassword] = useState('');
   const [weekStart, setWeekStart] = useState<WeekStart>(getWeekStart);
   const [appPasswords, setAppPasswords] = useState<{ id: string; name: string }[]>([]);
   const [newPasswordName, setNewPasswordName] = useState('CalDAV');
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [appPasswordBusy, setAppPasswordBusy] = useState(false);
   const [appPasswordError, setAppPasswordError] = useState('');
+  const [apiTokens, setApiTokens] = useState<{ id: string; name: string; created: string }[]>([]);
+  const [apiTokenName, setApiTokenName] = useState('');
+  const [apiToken, setApiToken] = useState('');
+  const [apiTokenError, setApiTokenError] = useState('');
+  const [apiTokenBusy, setApiTokenBusy] = useState(false);
+  const [mcpClients, setMcpClients] = useState<{ id: string; created: string; sessions: number }[]>([]);
+  const [mcpClientError, setMcpClientError] = useState('');
+  const [mcpClientBusy, setMcpClientBusy] = useState('');
+  const [mcpRedirectUri, setMcpRedirectUri] = useState('');
+  const [newMcpClientId, setNewMcpClientId] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailMessage, setEmailMessage] = useState('');
@@ -79,11 +124,16 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [accountModal, setAccountModal] = useState<AccountModal>(null);
   const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
   const [linkedSsoAccounts, setLinkedSsoAccounts] = useState<LinkedSsoAccount[]>([]);
   const [ssoBusy, setSsoBusy] = useState<string | null>(null);
   const [ssoError, setSsoError] = useState('');
+  const [ssoLinkPassword, setSsoLinkPassword] = useState('');
+  const [ssoRecoveryMessage, setSsoRecoveryMessage] = useState('');
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [devSeedBusy, setDevSeedBusy] = useState(false);
   const [devSeedMessage, setDevSeedMessage] = useState('');
@@ -97,11 +147,32 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     }
   });
   const carddavBaseUrl = `${apiBaseUrl}/carddav`;
+  const caldavBaseUrl = `${apiBaseUrl}/caldav/`;
 
   useEffect(() => {
     const updateCustomTheme = () => setCustomTheme(readCustomTheme());
     window.addEventListener('taskboard-custom-theme-change', updateCustomTheme);
     return () => window.removeEventListener('taskboard-custom-theme-change', updateCustomTheme);
+  }, []);
+
+  useEffect(() => {
+    void apiFetch('/api/auth/api-tokens', { headers: { Authorization: `Bearer ${pb.authStore.token}` } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        return (await response.json()) as { id: string; name: string; created: string }[];
+      })
+      .then(setApiTokens)
+      .catch(() => setApiTokenError('Could not load API tokens.'));
+  }, []);
+
+  useEffect(() => {
+    void apiFetch('/api/mcp/clients', { headers: { Authorization: `Bearer ${pb.authStore.token}` } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        return (await response.json()) as { id: string; created: string; sessions: number }[];
+      })
+      .then(setMcpClients)
+      .catch(() => setMcpClientError('Could not load authorized MCP clients.'));
   }, []);
 
   useEffect(() => {
@@ -153,7 +224,15 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     setSsoBusy(provider.name);
     setSsoError('');
     try {
-      await pb.collection('users').authWithOAuth2({ provider: provider.name });
+      const { intent } = await pb.send('/api/me/sso/link-intent', {
+        method: 'POST',
+        body: { password: ssoLinkPassword },
+      }) as { intent: string };
+      await pb.collection('users').authWithOAuth2({
+        provider: provider.name,
+        headers: { 'X-Taskboard-Link-Intent': intent },
+      });
+      setSsoLinkPassword('');
       await loadSsoAccounts();
     } catch {
       setSsoError(`Could not link ${provider.displayName}. Try again.`);
@@ -163,6 +242,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
   };
 
   const unlinkSso = async (provider: SsoProvider) => {
+    if (linkedSsoAccounts.length <= 1) {
+      setSsoError('Keep at least one connected sign-in method.');
+      return;
+    }
     const userId = pb.authStore.record?.id;
     if (!userId) return;
     setSsoBusy(provider.name);
@@ -176,6 +259,22 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       setSsoError(`Could not unlink ${provider.displayName}. Try again.`);
     } finally {
       setSsoBusy(null);
+    }
+  };
+
+  const sendSsoPasswordRecovery = async () => {
+    const email = String(pb.authStore.record?.email ?? '').trim();
+    if (!email) {
+      setSsoError('This account has no email address for password recovery.');
+      return;
+    }
+    setSsoError('');
+    setSsoRecoveryMessage('');
+    try {
+      await pb.collection('users').requestPasswordReset(email);
+      setSsoRecoveryMessage('Check your email for a link to set or reset your password.');
+    } catch {
+      setSsoError('Could not send a password recovery email.');
     }
   };
 
@@ -200,6 +299,50 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       setAppPasswordError('Could not create app password.');
     } finally {
       setAppPasswordBusy(false);
+    }
+  };
+
+  const createApiToken = async () => {
+    setApiTokenBusy(true);
+    setApiTokenError('');
+    try {
+      const response = await apiFetch('/api/auth/api-tokens', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${pb.authStore.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: apiTokenName }),
+      });
+      if (!response.ok) throw new Error();
+      const created = (await response.json()) as { id: string; name: string; token: string; created: string };
+      setApiTokens((tokens) => [created, ...tokens]);
+      setApiToken(created.token);
+      setApiTokenName('');
+    } catch {
+      setApiTokenError('Could not create an API token.');
+    } finally {
+      setApiTokenBusy(false);
+    }
+  };
+
+  const revokeApiToken = async (id: string) => {
+    const response = await apiFetch(`/api/auth/api-tokens/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${pb.authStore.token}` } });
+    if (response.ok) setApiTokens((tokens) => tokens.filter((token) => token.id !== id));
+    else setApiTokenError('Could not revoke this API token.');
+  };
+
+  const createMcpClient = async () => {
+    setMcpClientError('');
+    setNewMcpClientId('');
+    try {
+      const response = await apiFetch('/oauth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ redirect_uris: [mcpRedirectUri.trim()] }),
+      });
+      if (!response.ok) throw new Error();
+      const client = (await response.json()) as { client_id: string };
+      setNewMcpClientId(client.client_id);
+    } catch {
+      setMcpClientError('Could not register the MCP client. Use an HTTPS callback URL or localhost for development.');
     }
   };
 
@@ -239,6 +382,52 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       );
     } finally {
       setEmailBusy(false);
+    }
+  };
+
+  const exportAccount = async () => {
+    try {
+      const response = await apiFetch('/api/account/export', {
+        headers: { Authorization: `Bearer ${pb.authStore.token}` },
+      });
+      if (!response.ok) throw new Error();
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'taskboard-account-export.json';
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setDeleteError('Could not export account data. Try again.');
+    }
+  };
+
+  const deleteAccount = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setDeleteBusy(true);
+    setDeleteError('');
+    try {
+      const response = await apiFetch('/api/account/delete', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${pb.authStore.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ confirmEmail: deleteConfirmation }),
+      });
+      if (!response.ok) throw new Error();
+      const userId = pb.authStore.record?.id;
+      if (userId) {
+        localStorage.removeItem(`taskboard-accent-${userId}`);
+        localStorage.removeItem(`taskboard-font-size-${userId}`);
+        localStorage.removeItem(`taskboard-hidden-containers-${userId}`);
+      }
+      pb.authStore.clear();
+      window.location.assign('/auth/login');
+    } catch {
+      setDeleteError('Could not delete the account. Check the email and try again.');
+      setDeleteBusy(false);
     }
   };
 
@@ -339,6 +528,30 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     }
   };
 
+  const handleCalDavImport = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const calendar = getActiveContainers(lists).find((container) => container.kind === 'calendar');
+    if (!calendar) return;
+    setCalendarIOBusy(true);
+    setCalendarIOError('');
+    try {
+      const response = await apiFetch('/api/calendars/import-caldav', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${pb.authStore.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: calDavSource, username: calDavUsername, password: calDavPassword, calendar: calendar.id }),
+      });
+      const result = await response.json() as { imported?: number; message?: string };
+      if (!response.ok) throw new Error(result.message ?? 'Could not import from that CalDAV server.');
+      setImportedCalendars((current) => [`CalDAV: ${result.imported ?? 0} events`, ...current]);
+      setCalDavPassword('');
+      onChanged?.();
+    } catch (error) {
+      setCalendarIOError(error instanceof Error ? error.message : 'Could not import from CalDAV.');
+    } finally {
+      setCalendarIOBusy(false);
+    }
+  };
+
   const managedContainers: ManagedContainer[] = lists.map((container) => ({
     ...container,
     visible: !hiddenContainerIds.includes(container.id),
@@ -347,9 +560,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     container: ManagedContainer,
     changes: Pick<ManagedContainer, 'name' | 'color' | 'description'>,
   ) => {
-    await pb
-      .collection(container.kind === 'list' ? 'lists' : 'calendars')
-      .update(container.id, changes);
+    await offlineCollection(container.kind === 'list' ? 'lists' : 'calendars').update(
+      container.id,
+      changes,
+    );
     onChanged?.();
   };
   const setContainerVisible = (_container: ManagedContainer, visible: boolean) => {
@@ -361,9 +575,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     onChanged?.();
   };
   const setContainerArchived = async (container: ManagedContainer, archived: boolean) => {
-    await pb
-      .collection(container.kind === 'list' ? 'lists' : 'calendars')
-      .update(container.id, { archived });
+    await offlineCollection(container.kind === 'list' ? 'lists' : 'calendars').update(
+      container.id,
+      { archived },
+    );
     const next = archived
       ? [...new Set([...hiddenContainerIds, container.id])]
       : hiddenContainerIds.filter((id) => id !== container.id);
@@ -376,7 +591,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
       await setContainerArchived(container, true);
       return;
     }
-    await pb.collection(container.kind === 'list' ? 'lists' : 'calendars').delete(container.id);
+    await offlineCollection(container.kind === 'list' ? 'lists' : 'calendars').delete(container.id);
     onChanged?.();
   };
 
@@ -549,9 +764,29 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
     setTheme(nextTheme);
   };
 
+  const revokeMCPClient = async (id: string) => {
+    setMcpClientBusy(id);
+    setMcpClientError('');
+    try {
+      const response = await apiFetch(`/api/mcp/clients/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${pb.authStore.token}` },
+      });
+      if (!response.ok) throw new Error();
+      setMcpClients((current) => current.filter((client) => client.id !== id));
+    } catch {
+      setMcpClientError('Could not revoke this MCP client.');
+    } finally {
+      setMcpClientBusy('');
+    }
+  };
+
   return (
     <>
-      <header className="page-header">
+      <header
+        className="page-header"
+        aria-busy={settingsSnapshot.status === 'loading' || settingsSnapshot.status === 'saving'}
+      >
         <h1>Settings</h1>
       </header>
       <Tabs
@@ -571,6 +806,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
           {import.meta.env.DEV && <TabsTrigger value="dev">Dev</TabsTrigger>}
         </TabsList>
       </Tabs>
@@ -662,7 +898,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   <button
                     key={option.value}
                     className={fontSize === option.value ? 'active' : ''}
-                    onClick={() => setFontSize(option.value)}
+                    onClick={() => {
+                      setFontSize(option.value);
+                      void settingsStore.update({ fontSize: option.value });
+                    }}
                     aria-pressed={fontSize === option.value}
                   >
                     {option.name}
@@ -681,7 +920,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                     key={color.value}
                     className={accentColor === color.value ? 'active' : ''}
                     style={{ backgroundColor: color.value }}
-                    onClick={() => setAccentColor(color.value)}
+                    onClick={() => {
+                      setAccentColor(color.value);
+                      void settingsStore.update({ accentColor: color.value });
+                    }}
                     aria-label={color.name}
                     aria-pressed={accentColor === color.value}
                   />
@@ -695,7 +937,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   <input
                     type="color"
                     value={accentColor}
-                    onChange={(event) => setAccentColor(event.target.value)}
+                    onChange={(event) => {
+                      setAccentColor(event.target.value);
+                      void settingsStore.update({ accentColor: event.target.value });
+                    }}
                     aria-label="Choose a custom accent color"
                   />
                 </label>
@@ -737,7 +982,49 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 </span>
                 <ChevronRight size={18} aria-hidden="true" />
               </button>
+              <button className="account-action" type="button" onClick={() => void exportAccount()}>
+                <span>
+                  <strong>Export account data</strong>
+                  <small>Download your tasks, events, contacts, and account data as JSON.</small>
+                </span>
+                <Download size={18} aria-hidden="true" />
+              </button>
+              <button
+                className="account-action account-action-danger"
+                type="button"
+                onClick={() => {
+                  setDeleteError('');
+                  setDeleteConfirmation('');
+                  setAccountModal('delete');
+                }}
+              >
+                <span>
+                  <strong>Delete account</strong>
+                  <small>Permanently remove your account and its data.</small>
+                </span>
+                <Trash2 size={18} aria-hidden="true" />
+              </button>
+              {deleteError && accountModal !== 'delete' && (
+                <p className="form-error" role="alert">
+                  {deleteError}
+                </p>
+              )}
             </div>
+            <section className="authorized-mcp-clients" aria-label="Authorized MCP clients">
+              <div>
+                <h2>Authorized MCP clients</h2>
+                <p>Apps connected to Taskboard through MCP OAuth.</p>
+              </div>
+              {mcpClientError && <p className="form-error" role="alert">{mcpClientError}</p>}
+              {mcpClients.length === 0 ? <p>No active MCP clients.</p> : mcpClients.map((client) => (
+                <div className="app-password-row" key={client.id}>
+                  <span><code>{client.id}</code> · {client.sessions} active session{client.sessions === 1 ? '' : 's'}</span>
+                  <button type="button" aria-label={`Revoke MCP client ${client.id}`} disabled={mcpClientBusy === client.id} onClick={() => void revokeMCPClient(client.id)}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </section>
             {ssoProviders.length > 0 && (
               <div className="account-sso">
                 <div>
@@ -745,6 +1032,10 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   <p>Link a work or personal SSO account for faster sign-in.</p>
                 </div>
                 <div className="sso-account-list">
+                  {ssoProviders.some((provider) => !linkedSsoAccounts.some((account) => account.provider === provider.name)) && (
+                    <input type="password" autoComplete="current-password" aria-label="Current password to link SSO" placeholder="Current password required to link SSO" value={ssoLinkPassword} onChange={(event) => setSsoLinkPassword(event.target.value)} />
+                  )}
+                  <button className="button button-quiet" type="button" onClick={() => void sendSsoPasswordRecovery()}>Set or reset password by email</button>
                   {ssoProviders.map((provider) => {
                     const linked = linkedSsoAccounts.some(
                       (account) => account.provider === provider.name,
@@ -758,7 +1049,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                         <button
                           className="button button-quiet"
                           type="button"
-                          disabled={ssoBusy !== null}
+                          disabled={ssoBusy !== null || (linked && linkedSsoAccounts.length <= 1)}
                           onClick={() => void (linked ? unlinkSso(provider) : linkSso(provider))}
                         >
                           {ssoBusy === provider.name
@@ -774,6 +1065,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   })}
                 </div>
                 {ssoError && <p className="error-text">{ssoError}</p>}
+                {ssoRecoveryMessage && <p className="form-message" role="status">{ssoRecoveryMessage}</p>}
               </div>
             )}
           </div>
@@ -791,6 +1083,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   onClick={() => {
                     localStorage.setItem(weekStartStorageKey, 'sunday');
                     setWeekStart('sunday');
+                    void settingsStore.update({ weekStart: 'sunday' });
                   }}
                   aria-pressed={weekStart === 'sunday'}
                 >
@@ -801,6 +1094,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   onClick={() => {
                     localStorage.setItem(weekStartStorageKey, 'monday');
                     setWeekStart('monday');
+                    void settingsStore.update({ weekStart: 'monday' });
                   }}
                   aria-pressed={weekStart === 'monday'}
                 >
@@ -858,19 +1152,38 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   ))}
               </div>
             </div>
+            <div className="settings-section calendar-settings">
+              <div><h2>Import from CalDAV</h2><p>Copy events once from a CalDAV calendar URL. This cannot be repeated.</p></div>
+              <form onSubmit={(event) => void handleCalDavImport(event)} className="calendar-import-form">
+                <label>CalDAV calendar URL<input type="url" required value={calDavSource} onChange={(event) => setCalDavSource(event.target.value)} placeholder="https://calendar.example/dav/" /></label>
+                <label>Username<input autoComplete="username" value={calDavUsername} onChange={(event) => setCalDavUsername(event.target.value)} /></label>
+                <label>Password<input type="password" autoComplete="current-password" value={calDavPassword} onChange={(event) => setCalDavPassword(event.target.value)} /></label>
+                <button className="button button-quiet" type="submit" disabled={calendarIOBusy}>{calendarIOBusy ? 'Importing…' : 'Import once'}</button>
+              </form>
+            </div>
             <div className="settings-section calendar-sync-settings">
               <div>
-                <h2>Contact sync</h2>
+                <h2>Calendar and contact sync</h2>
                 <p>
-                  Use this URL in your CardDAV client. Sign in with your account email and an app
-                  password. CalDAV calendar sync is not available yet.
+                  CalDAV calendar sync is in beta. Add the server URL to a CalDAV client and sign in
+                  with your account email and a DAV app password. The server advertises your
+                  calendars after sign-in.
                 </p>
                 <div className="sync-urls">
+                  <label>
+                    CalDAV server URL<code>{caldavBaseUrl}</code>
+                  </label>
                   <label>
                     CardDAV server URL<code>{carddavBaseUrl}</code>
                   </label>
                 </div>
                 <div className="app-passwords">
+                  <strong>Setup</strong>
+                  <ol>
+                    <li>Generate an app password below and copy it; it is shown once.</li>
+                    <li>In your calendar client, add an account using the CalDAV server URL.</li>
+                    <li>Use your Taskboard account email as the user name and the app password.</li>
+                  </ol>
                   <strong>DAV app passwords</strong>
                   <p>
                     App passwords can be used instead of your real password. You will only see the
@@ -911,10 +1224,30 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 </div>
               </div>
               <span className="status-pill">
-                <span /> CardDAV available
+                <span /> CalDAV beta · CardDAV available
               </span>
             </div>
           </>
+        )}
+        {activeSection === 'integrations' && (
+          <div className="settings-section integrations-settings">
+            <div><h2>API tokens</h2><p>Create named bearer tokens for API tools. Secrets are shown once and can be revoked here.</p></div>
+            <div className="app-password-create"><input aria-label="API token name" value={apiTokenName} onChange={(event) => setApiTokenName(event.target.value)} placeholder="Name, for example automation" /><button className="button button-quiet" type="button" onClick={() => void createApiToken()} disabled={apiTokenBusy || !apiTokenName.trim()}>{apiTokenBusy ? 'Creating…' : 'Create API token'}</button></div>
+            {apiTokenError && <p className="form-error" role="alert">{apiTokenError}</p>}
+            {apiToken && <div className="new-app-password"><code>{apiToken}</code><button type="button" aria-label="Copy API token" onClick={() => void navigator.clipboard.writeText(apiToken)}><Copy size={15} /></button><p>Copy now. Revoke it below when it is no longer needed.</p></div>}
+            {apiTokens.map((token) => <div className="app-password-row" key={token.id}><span>{token.name} · {new Date(token.created).toLocaleDateString()}</span><button type="button" aria-label={`Revoke API token ${token.name}`} onClick={() => void revokeApiToken(token.id)}><Trash2 size={14} /></button></div>)}
+            <div><h2>MCP credentials</h2><p>Connected MCP apps use OAuth credentials and can be revoked here.</p></div>
+            <div className="app-password-create"><input aria-label="MCP OAuth redirect URL" type="url" value={mcpRedirectUri} onChange={(event) => setMcpRedirectUri(event.target.value)} placeholder="https://app.example/oauth/callback" /><button className="button button-quiet" type="button" onClick={() => void createMcpClient()} disabled={!mcpRedirectUri.trim()}>Create MCP client</button></div>
+            {newMcpClientId && <p className="new-app-password">MCP client ID: <code>{newMcpClientId}</code></p>}
+            {mcpClientError && <p className="form-error" role="alert">{mcpClientError}</p>}
+            {mcpClients.length === 0 ? <p>No active MCP clients.</p> : mcpClients.map((client) => <div className="app-password-row" key={client.id}><span><code>{client.id}</code> · {client.sessions} active sessions</span><button type="button" aria-label={`Revoke MCP client ${client.id}`} disabled={mcpClientBusy === client.id} onClick={() => void revokeMCPClient(client.id)}><Trash2 size={14} /></button></div>)}
+            <div><h2>CalDAV credentials</h2><p>Generate an app password for CalDAV and CardDAV clients. It is shown only once.</p></div>
+            <div className="app-password-create"><input aria-label="CalDAV credential name" value={newPasswordName} onChange={(event) => setNewPasswordName(event.target.value)} placeholder="Name, for example phone" /><button className="button button-quiet" type="button" onClick={() => void createAppPassword()} disabled={appPasswordBusy}>{appPasswordBusy ? 'Creating…' : 'Create CalDAV credential'}</button></div>
+            {newPassword && <p className="new-app-password"><code>{newPassword}</code></p>}
+            {appPasswordError && <p className="form-error" role="alert">{appPasswordError}</p>}
+            {appPasswords.map((password) => <div className="app-password-row" key={password.id}><span>{password.name}</span><button type="button" aria-label={`Revoke CalDAV credential ${password.name}`} onClick={() => void revokeAppPassword(password.id)}><Trash2 size={14} /></button></div>)}
+            <div className="sync-urls"><label>CalDAV server URL<code>{caldavBaseUrl}</code></label><label>CardDAV server URL<code>{carddavBaseUrl}</code></label></div>
+          </div>
         )}
         {import.meta.env.DEV && activeSection === 'dev' && (
           <div className="settings-section">
@@ -985,7 +1318,11 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
             />
             {themeImportError && <small className="settings-error">{themeImportError}</small>}
             <div className="modal-actions">
-              <button type="button" className="button button-quiet" onClick={() => setThemePasteOpen(false)}>
+              <button
+                type="button"
+                className="button button-quiet"
+                onClick={() => setThemePasteOpen(false)}
+              >
                 Cancel
               </button>
               <button
@@ -1016,12 +1353,18 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
             <div className="composer-header">
               <div>
                 <h2 id="account-modal-title">
-                  {accountModal === 'email' ? 'Change email' : 'Change password'}
+                  {accountModal === 'email'
+                    ? 'Change email'
+                    : accountModal === 'password'
+                      ? 'Change password'
+                      : 'Delete account'}
                 </h2>
                 <p className="modal-subtitle">
                   {accountModal === 'email'
                     ? 'We will send a confirmation link to your new address.'
-                    : 'Use a password you do not use anywhere else.'}
+                    : accountModal === 'password'
+                      ? 'Use a password you do not use anywhere else.'
+                      : 'This permanently deletes your account and all app data. This cannot be undone.'}
                 </p>
               </div>
               <button
@@ -1059,7 +1402,7 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                   {emailBusy ? 'Sending…' : 'Change email'}
                 </button>
               </form>
-            ) : (
+            ) : accountModal === 'password' ? (
               <form className="account-form" onSubmit={(event) => void changePassword(event)}>
                 <label>
                   Current password
@@ -1105,6 +1448,27 @@ export function SettingsTab({ onChanged }: { onChanged?: () => void }) {
                 )}
                 <button className="button button-primary" disabled={passwordBusy}>
                   {passwordBusy ? 'Changing…' : 'Change password'}
+                </button>
+              </form>
+            ) : (
+              <form className="account-form" onSubmit={(event) => void deleteAccount(event)}>
+                <label>
+                  Type your account email to confirm
+                  <input
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={deleteConfirmation}
+                    onChange={(event) => setDeleteConfirmation(event.target.value)}
+                  />
+                </label>
+                {deleteError && (
+                  <p className="form-error" role="alert">
+                    {deleteError}
+                  </p>
+                )}
+                <button className="button button-destructive" disabled={deleteBusy}>
+                  {deleteBusy ? 'Deleting…' : 'Delete account and data'}
                 </button>
               </form>
             )}

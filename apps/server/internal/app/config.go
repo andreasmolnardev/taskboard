@@ -17,16 +17,22 @@ const (
 )
 
 type Config struct {
-	HTTPAddress       string
-	PublicURL         string
-	RegistrationMode  RegistrationMode
-	StoragePath       string
-	Development       bool
-	BackupEnabled     bool
-	BackupJSONEnabled bool
-	BackupCron        string
-	BackupMaxKeep     int
-	BackupS3          BackupS3Config
+	HTTPAddress          string
+	PublicURL            string
+	WebPath              string
+	RegistrationMode     RegistrationMode
+	SSOOnly              bool
+	RequireVerifiedEmail bool
+	StoragePath          string
+	Development          bool
+	MCPResourceURL       string
+	MCPOAuthSigningKey   string
+	MCPPath              string
+	BackupEnabled        bool
+	BackupJSONEnabled    bool
+	BackupCron           string
+	BackupMaxKeep        int
+	BackupS3             BackupS3Config
 }
 
 type BackupS3Config struct {
@@ -41,15 +47,21 @@ type BackupS3Config struct {
 
 func LoadConfig() Config {
 	return Config{
-		HTTPAddress:       env("TASKBOARD_HTTP_ADDRESS", "0.0.0.0:8090"),
-		PublicURL:         env("TASKBOARD_PUBLIC_URL", "http://localhost:8090"),
-		RegistrationMode:  registrationMode(),
-		StoragePath:       env("TASKBOARD_STORAGE_PATH", "pb_data"),
-		Development:       envBool("TASKBOARD_DEVELOPMENT", false),
-		BackupEnabled:     envBool("TASKBOARD_BACKUP_ENABLED", false),
-		BackupJSONEnabled: envBool("TASKBOARD_BACKUP_JSON_ENABLED", false),
-		BackupCron:        env("TASKBOARD_BACKUP_CRON", "0 3 * * *"),
-		BackupMaxKeep:     envInt("TASKBOARD_BACKUP_MAX_KEEP", 14),
+		HTTPAddress:          env("TASKBOARD_HTTP_ADDRESS", "0.0.0.0:8090"),
+		PublicURL:            env("TASKBOARD_PUBLIC_URL", "http://localhost:8090"),
+		WebPath:              env("TASKBOARD_WEB_PATH", "public"),
+		RegistrationMode:     registrationMode(),
+		SSOOnly:              envBool("TASKBOARD_SSO_ONLY", false),
+		RequireVerifiedEmail: envBool("TASKBOARD_REQUIRE_VERIFIED_EMAIL", false),
+		StoragePath:          env("TASKBOARD_STORAGE_PATH", "pb_data"),
+		Development:          envBool("TASKBOARD_DEVELOPMENT", false),
+		MCPResourceURL:       env("TASKBOARD_MCP_RESOURCE_URL", ""),
+		MCPOAuthSigningKey:   env("TASKBOARD_MCP_OAUTH_SIGNING_KEY", ""),
+		MCPPath:              env("TASKBOARD_MCP_PATH", "/mcp"),
+		BackupEnabled:        envBool("TASKBOARD_BACKUP_ENABLED", false),
+		BackupJSONEnabled:    envBool("TASKBOARD_BACKUP_JSON_ENABLED", false),
+		BackupCron:           env("TASKBOARD_BACKUP_CRON", "0 3 * * *"),
+		BackupMaxKeep:        envInt("TASKBOARD_BACKUP_MAX_KEEP", 14),
 		BackupS3: BackupS3Config{
 			Enabled:        envBool("TASKBOARD_BACKUP_S3_ENABLED", false),
 			Bucket:         env("TASKBOARD_BACKUP_S3_BUCKET", ""),

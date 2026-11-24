@@ -1,52 +1,40 @@
-import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router';
-import { pb } from './api/pocketbase';
-import { App } from './app';
+import { useCallback, useSyncExternalStore } from 'react';
 
-const rootRoute = createRootRoute({
-  beforeLoad: ({ location }) => {
-    const isAuthRoute = location.pathname.startsWith('/auth/');
-    if (!pb.authStore.isValid && !isAuthRoute) {
-      throw redirect({ to: '/auth/login', replace: true });
+type LocationSnapshot = { location: { pathname: string; search: URLSearchParams } };
+type NavigateOptions = { to: string; replace?: boolean; search?: Record<string, string | undefined> };
+
+function subscribe(listener: () => void) {
+  window.addEventListener('popstate', listener);
+  window.addEventListener('slopstack:navigate', listener);
+  return () => {
+    window.removeEventListener('popstate', listener);
+    window.removeEventListener('slopstack:navigate', listener);
+  };
+}
+
+export function useRouterState<T>({ select }: { select: (state: LocationSnapshot) => T }): T {
+  const href = useSyncExternalStore(
+    subscribe,
+    () => `${window.location.pathname}${window.location.search}`,
+    () => '/',
+  );
+  const url = new URL(href, 'http://taskboard.local');
+  return select({ location: { pathname: url.pathname, search: url.searchParams } });
+}
+
+export function useNavigate() {
+  return useCallback((target: string | NavigateOptions) => {
+    const options = typeof target === 'string' ? { to: target } : target;
+    const url = new URL(options.to, window.location.href);
+    if (options.search) {
+      url.search = '';
+      for (const [key, value] of Object.entries(options.search)) {
+        if (value !== undefined) url.searchParams.set(key, value);
+      }
     }
-    if (pb.authStore.isValid && isAuthRoute) {
-      throw redirect({ to: '/', replace: true });
-    }
-  },
-  component: App,
-});
-
-const upcomingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' });
-const calendarRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/calendar',
-  validateSearch: (search: Record<string, unknown>) => ({
-    month: typeof search.month === 'string' ? search.month : undefined,
-  }),
-});
-const listsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/lists' });
-const peopleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/people' });
-const searchRoute = createRoute({ getParentRoute: () => rootRoute, path: '/search' });
-
-const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings' });
-const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/auth/login' });
-const registerRoute = createRoute({ getParentRoute: () => rootRoute, path: '/auth/register' });
-
-const routeTree = rootRoute.addChildren([
-  upcomingRoute,
-  calendarRoute,
-  listsRoute,
-  peopleRoute,
-  searchRoute,
-
-  settingsRoute,
-  loginRoute,
-  registerRoute,
-]);
-
-export const router = createRouter({ routeTree });
-
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router;
-  }
+    const path = `${url.pathname}${url.search}${url.hash}`;
+    if (options.replace) window.history.replaceState(window.history.state, '', path);
+    else window.history.pushState(window.history.state, '', path);
+    window.dispatchEvent(new Event('slopstack:navigate'));
+  }, []);
 }

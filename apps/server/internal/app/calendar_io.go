@@ -20,6 +20,36 @@ const (
 	calendarDataVersion   = 1
 )
 
+func ensureCalDAVImports(app core.App) error {
+	c, err := app.FindCollectionByNameOrId("caldav_imports")
+	if err != nil {
+		c = core.NewBaseCollection("caldav_imports")
+	}
+	for _, field := range []core.Field{
+		&core.TextField{Name: "owner", Required: true},
+		&core.TextField{Name: "source", Required: true},
+		&core.NumberField{Name: "imported", OnlyInt: true},
+	} {
+		if c.Fields.GetByName(field.GetName()) == nil {
+			c.Fields.Add(field)
+		}
+	}
+	ownerRule := "@request.auth.id = owner"
+	c.ListRule = &ownerRule
+	c.ViewRule = &ownerRule
+	c.CreateRule = &ownerRule
+	c.UpdateRule = &ownerRule
+	c.DeleteRule = &ownerRule
+	if c.GetIndex("idx_caldav_import_owner") == "" {
+		c.AddIndex("idx_caldav_import_owner", true, "owner", "")
+	}
+	return app.Save(c)
+}
+
+func EnsureCalDAVImports(app core.App) error {
+	return ensureCalDAVImports(app)
+}
+
 type storedCalendarData struct {
 	Version    int                    `json:"version"`
 	Properties map[string][]ical.Prop `json:"properties,omitempty"`

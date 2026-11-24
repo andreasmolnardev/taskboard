@@ -10,7 +10,7 @@
 
 ## Bug Fixes
 
-- [ ] Verify static frontend serving through the Go runtime.
+- [x] Verify static frontend serving through the Go runtime.
 
 ## DX Improvements
 

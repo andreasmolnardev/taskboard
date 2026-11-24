@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/andreasmolnardev/slopstack/go/httpapi"
@@ -15,6 +14,7 @@ import (
 )
 
 func Register(pb *pocketbase.PocketBase, config Config, api huma.API) error {
+	registerOfflineSyncAPI(api)
 	registerTodoAPI(api)
 	if err := registerAuditHooks(pb); err != nil {
 		return fmt.Errorf("register audit hooks: %w", err)
@@ -49,14 +49,22 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) error {
 		if err := EnsureCardDAVChanges(e.App); err != nil {
 			return err
 		}
+		if err := EnsureCalDAVImports(e.App); err != nil {
+			return err
+		}
+		if err := EnsureOfflineSync(e.App); err != nil {
+			return err
+		}
 		return applyBackupConfig(e.App, config)
 	})
 	protectUserAdminFlag(pb, config)
+	registerAuthSecurityHooks(pb, config)
 	if err := registerOwnershipHooks(pb); err != nil {
 		return fmt.Errorf("register ownership hooks: %w", err)
 	}
 	registerCalDAVChangeHooks(pb)
 	registerCardDAVChangeHooks(pb)
+	registerOfflineSyncHooks(pb)
 	registerReminderScheduler(pb)
 	registerEncryptedBackupScheduler(pb, config)
 	pb.OnRecordAfterCreateSuccess("users").BindFunc(func(e *core.RecordEvent) error {
@@ -67,7 +75,9 @@ func Register(pb *pocketbase.PocketBase, config Config, api huma.API) error {
 	})
 
 	pb.OnServe().BindFunc(func(e *core.ServeEvent) error {
-		registerRoutes(e, config, api)
+		if err := registerRoutes(e, config, api); err != nil {
+			return err
+		}
 		return e.Next()
 	})
 	return nil
@@ -194,9 +204,11 @@ func protectUserAdminFlag(pb *pocketbase.PocketBase, config Config) {
 	})
 }
 
-func registerRoutes(e *core.ServeEvent, config Config, api huma.API) {
+func registerRoutes(e *core.ServeEvent, config Config, api huma.API) error {
 	httpapi.RegisterOpenAPIDocs(e, api)
+	registerAuthSecurityRoutes(e, config)
 	registerAuthRoutes(e, config)
+	registerAccountRoutes(e)
 	registerAppPasswordRoutes(e)
 	registerCalendarIORoutes(e)
 	registerOccurrenceRoutes(e)
@@ -204,12 +216,17 @@ func registerRoutes(e *core.ServeEvent, config Config, api huma.API) {
 	registerCalDAVRoutes(e)
 	registerCardDAVRoutes(e)
 	registerSearchRoutes(e)
+	registerOfflineSyncRoutes(e)
 	registerTodoRoutes(e, config, api)
-	publicDir := os.Getenv("TASKBOARD_PUBLIC_DIR")
-	if publicDir == "" {
-		publicDir = "public"
+	registerMCPRoute(e, config)
+	if err := registerAPITokenRoutes(e); err != nil {
+		return fmt.Errorf("register API token routes: %w", err)
 	}
-	httpapi.RegisterStaticDirectory(e, publicDir)
+	if err := registerMCPOAuthRoutes(e, config); err != nil {
+		return fmt.Errorf("register MCP OAuth routes: %w", err)
+	}
+	registerWebRoutes(e, config)
+	return nil
 }
 
 func registerAuthRoutes(e *core.ServeEvent, config Config) {

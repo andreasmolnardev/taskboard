@@ -13,3 +13,5 @@ tmp/
 openapi/openapi.json
 apps/web/src/api/generated/
 *.tsbuildinfo
+playwright-report/
+test-results/

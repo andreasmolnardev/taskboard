@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link } from '@tanstack/react-router';
 import { Check } from 'lucide-react';
 import { apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
+import { enabledSsoProviders } from '../../auth-policy';
 
 export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
   const [email, setEmail] = useState('');
@@ -13,22 +13,29 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
   const [registrationMode, setRegistrationMode] = useState<'disabled' | 'approval' | 'otp'>(
     'approval',
   );
-  const [ssoProviders, setSsoProviders] = useState<{ name: string; displayName: string }[]>([]);
+  const [ssoProviders, setSsoProviders] = useState<{ name: string; displayName?: string }[]>([]);
   const [ssoBusy, setSsoBusy] = useState(false);
+  const [ssoOnly, setSsoOnly] = useState(false);
+  const [requireVerifiedEmail, setRequireVerifiedEmail] = useState(false);
   useEffect(() => {
     if (mode !== 'login') return;
     void pb
       .collection('users')
       .listAuthMethods()
       .then((methods) => {
-        if (methods.oauth2.enabled) {
-          setSsoProviders(
-            methods.oauth2.providers.map(({ name, displayName }) => ({ name, displayName })),
-          );
-        }
+        setSsoProviders(enabledSsoProviders(methods));
       })
       .catch(() => setSsoProviders([]));
   }, [mode]);
+  useEffect(() => {
+    let active = true;
+    void apiFetch('/api/auth/policy').then((response) => response.json()).then((policy: { ssoOnly?: boolean; requireVerifiedEmail?: boolean }) => {
+      if (!active) return;
+      setSsoOnly(Boolean(policy.ssoOnly));
+      setRequireVerifiedEmail(Boolean(policy.requireVerifiedEmail));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     if (mode !== 'register') return;
     void apiFetch('/api/auth/registration-policy')
@@ -79,6 +86,11 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
       if (mode === 'register') {
         if (registrationMode === 'disabled') return;
         await pb.collection('users').create({ email, password, passwordConfirm: password });
+        if (requireVerifiedEmail) {
+          await pb.collection('users').requestVerification(email.trim());
+          setMessage('Account created. Check your email to verify it before signing in.');
+          return;
+        }
         setMessage(
           registrationMode === 'otp'
             ? 'Account created. Read the activation code in the server logs, then ask an administrator to activate your account.'
@@ -107,7 +119,7 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
         <h1>{mode === 'register' ? 'Create your account' : 'Welcome back'}</h1>
         {mode === 'login' && <p>Sign in to see your Taskboard.</p>}
         {message && <div className="auth-message">{message}</div>}
-        {!disabled && (
+        {!disabled && !(mode === 'login' && ssoOnly && ssoProviders.length > 0) && (
           <>
             <label>
               Email
@@ -132,7 +144,7 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
           </>
         )}
         {error && <div className="auth-error">{error}</div>}
-        {!disabled && (
+        {!disabled && !(mode === 'login' && ssoOnly && ssoProviders.length > 0) && (
           <button className="button button-primary auth-submit" disabled={busy || ssoBusy}>
             {busy
               ? mode === 'register'
@@ -154,17 +166,18 @@ export function AuthScreen({ mode }: { mode: 'login' | 'register' }) {
                 disabled={busy || ssoBusy}
                 onClick={() => void handleSso(provider.name)}
               >
-                {ssoBusy ? 'Opening SSO…' : `Sign in with ${provider.displayName}`}
+                {ssoBusy ? 'Opening SSO…' : `Sign in with ${provider.displayName || provider.name}`}
               </button>
             ))}
           </div>
         )}
         <p className="auth-switch">
           {mode === 'register' ? 'Already have an account?' : 'Need an account?'}{' '}
-          <Link to={mode === 'register' ? '/auth/login' : '/auth/register'}>
+          <a href={mode === 'register' ? '/auth/login' : '/auth/register'}>
             {mode === 'register' ? 'Sign in' : 'Sign up'}
-          </Link>
+          </a>
         </p>
+        {mode === 'login' && <p className="auth-switch"><a href="/admin/sso">SSO administration</a></p>}
         {mode === 'login' && import.meta.env.DEV && (
           <button
             type="button"

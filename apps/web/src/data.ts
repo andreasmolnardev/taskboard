@@ -38,6 +38,10 @@ export type EntryContainer = {
   description: string;
   kind: 'list' | 'calendar';
   archived: boolean;
+  isProject?: boolean;
+  projectStatus?: 'active' | 'paused' | 'completed';
+  homeUrl?: string;
+  targetDate?: string;
 };
 
 export const lists: EntryContainer[] = [];

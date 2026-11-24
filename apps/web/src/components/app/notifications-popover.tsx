@@ -1,9 +1,8 @@
-import { useEffect } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { offlineJson } from '../../offline';
+import { useEffect, useState } from 'react';
 import { Bell, X } from 'lucide-react';
-import { apiFetch, apiJson } from '../../api/client';
+import { apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
-import { taskboardQueryKeys } from '../../api/query-keys';
 
 type Notification = {
   id: string;
@@ -27,41 +26,50 @@ export function NotificationsPopover({
   onAnimationEnd: (event: React.AnimationEvent<HTMLDivElement>) => void;
   onCountChange?: (count: number) => void;
 }) {
-  const queryClient = useQueryClient();
-  const userId = pb.authStore.record?.id ?? '';
-  const queryKey = taskboardQueryKeys.notifications(userId);
-  const notificationQuery = useQuery({
-    queryKey,
-    enabled: Boolean(userId && (open || closing)),
-    queryFn: () => apiJson<Notification[]>('/api/notifications'),
-  });
-  const mutation = useMutation({
-    mutationFn: async ({ url, method, body }: { url: string; method: string; body?: object }) => {
-      const response = await apiFetch(url, {
-        method,
-        ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
-      });
-      if (!response.ok) throw new Error('Could not update notifications.');
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
-  });
-  const notifications = notificationQuery.data ?? [];
-  const error =
-    notificationQuery.error instanceof Error
-      ? notificationQuery.error.message
-      : mutation.error instanceof Error
-        ? mutation.error.message
-        : '';
-
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [error, setError] = useState('');
+  const load = async () => {
+    const { data: items, cached } = await offlineJson<Notification[]>('/api/notifications');
+    setNotifications(items);
+    setError(cached ? 'Saved notifications · connect to update them.' : '');
+    onCountChange?.(items.filter((item) => !item.read).length);
+  };
+  const userId = pb.authStore.record?.id;
   useEffect(() => {
-    onCountChange?.(notifications.filter((item) => !item.read).length);
-  }, [notifications, onCountChange]);
-
+    void load().catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : 'Could not load notifications.');
+      onCountChange?.(0);
+    });
+  }, [open, userId]);
   const action = async (id: string, path: string, body?: object) => {
-    mutation.mutate({ url: `/api/notifications/${id}/${path}`, method: path === 'read' ? 'PATCH' : 'POST', body });
+    try {
+      if (!navigator.onLine) throw new Error('Notifications are read-only offline.');
+      const response = await apiFetch(`/api/notifications/${id}/${path}`, {
+        method: path === 'read' ? 'PATCH' : 'POST',
+        headers: {
+          Authorization: `Bearer ${pb.authStore.token}`,
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      if (!response.ok) throw new Error('Could not update this notification.');
+      await load();
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : 'Could not update this notification.');
+    }
   };
   const markAllRead = async () => {
-    mutation.mutate({ url: '/api/notifications/read-all', method: 'POST' });
+    try {
+      if (!navigator.onLine) throw new Error('Notifications are read-only offline.');
+      const response = await apiFetch('/api/notifications/read-all', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${pb.authStore.token}` },
+      });
+      if (!response.ok) throw new Error('Could not mark notifications as read.');
+      await load();
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : 'Could not mark notifications as read.');
+    }
   };
   if (!open && !closing) return null;
   return (
@@ -78,8 +86,8 @@ export function NotificationsPopover({
       {notifications.length === 0 ? (
         <div className="empty-state notification-empty">
           <Bell size={22} />
-        <strong>{notificationQuery.isLoading ? 'Loading notifications…' : error || 'No notifications'}</strong>
-        <span>{error ? 'Try again later.' : 'Updates will appear here.'}</span>
+          <strong>{error || 'No notifications'}</strong>
+          <span>{error ? 'Try again later.' : 'Updates will appear here.'}</span>
         </div>
       ) : (
         <div className="notification-list">
@@ -92,7 +100,6 @@ export function NotificationsPopover({
                 {!notification.read && (
                   <button
                     className="button button-quiet"
-                    disabled={mutation.isPending}
                     onClick={() => void action(notification.id, 'read')}
                   >
                     Read
@@ -100,7 +107,6 @@ export function NotificationsPopover({
                 )}
                 <button
                   className="button button-quiet"
-                  disabled={mutation.isPending}
                   onClick={() =>
                     void action(notification.id, 'snooze', {
                       until: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
@@ -111,7 +117,6 @@ export function NotificationsPopover({
                 </button>
                 <button
                   className="button button-quiet"
-                  disabled={mutation.isPending}
                   onClick={() => void action(notification.id, 'dismiss')}
                 >
                   Dismiss
@@ -123,7 +128,6 @@ export function NotificationsPopover({
       )}
       <button
         className="button button-quiet notification-footer"
-        disabled={mutation.isPending}
         onClick={() => void markAllRead()}
       >
         Mark all as read

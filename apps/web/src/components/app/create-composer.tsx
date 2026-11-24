@@ -1,3 +1,4 @@
+import { offlineCollection, offlineRecurrence, waitForOfflineRecord } from '../../offline';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -5,6 +6,9 @@ import { apiFetch } from '../../api/client';
 import { pb } from '../../api/pocketbase';
 import { entries, getActiveContainers, lists, type Entry } from '../../data';
 import { CreateFields } from '../create-fields';
+import { ResourceForm } from '../../lib/slopstack';
+import { calendarResource, listResource } from '../../resources/taskboard';
+import { taskboardColorField } from '../../application';
 import { localToRecord, recordToLocal } from './create-composer.helpers';
 
 type Props = {
@@ -15,11 +19,24 @@ type Props = {
   color: string;
   editing?: Entry | null;
   onTypeChange: (type: string) => void;
-  onColorChange: (color: string) => void;
   onClose: () => void;
   onCreated: () => void;
 };
-type Form = Record<string, string | boolean>;
+type Form = Record<string, unknown>;
+type ChecklistItem = { id: string; title: string; completed: boolean };
+type ReminderRecord = { id: string; at: string; offsetMinutes: number; status: string };
+
+function parseChecklist(value: unknown): ChecklistItem[] {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is ChecklistItem =>
+      item && typeof item.id === 'string' && typeof item.title === 'string' && typeof item.completed === 'boolean',
+    );
+  } catch {
+    return [];
+  }
+}
 
 function repeatFromRule(value: unknown) {
   const rule = String(value ?? '').toUpperCase();
@@ -49,6 +66,66 @@ function repeatRule(value: string, original: unknown) {
     default:
       return '';
   }
+}
+
+function reminderLabel(minutes: number) {
+  if (minutes === 0) return 'At start';
+  const absolute = Math.abs(minutes);
+  const unit = absolute % 10080 === 0 ? 'week' : absolute % 1440 === 0 ? 'day' : absolute % 60 === 0 ? 'hour' : 'minute';
+  const amount = unit === 'week' ? absolute / 10080 : unit === 'day' ? absolute / 1440 : unit === 'hour' ? absolute / 60 : absolute;
+  return `${amount} ${unit}${amount === 1 ? '' : 's'} ${minutes < 0 ? 'before' : 'after'}`;
+}
+
+function ChecklistEditor({
+  items,
+  onChange,
+}: {
+  items: ChecklistItem[];
+  onChange: (items: ChecklistItem[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const addItem = () => {
+    const title = draft.trim();
+    if (!title) return;
+    onChange([...items, { id: crypto.randomUUID(), title, completed: false }]);
+    setDraft('');
+  };
+  return (
+    <section className="checklist-editor" aria-label="Task checklist">
+      <strong>Checklist</strong>
+      {items.map((item, index) => (
+        <div className="checklist-editor-row" key={item.id}>
+          <input
+            type="checkbox"
+            checked={item.completed}
+            aria-label={`Complete ${item.title}`}
+            onChange={(event) => onChange(items.map((current) => current.id === item.id ? { ...current, completed: event.target.checked } : current))}
+          />
+          <input
+            aria-label={`Checklist item ${index + 1}`}
+            value={item.title}
+            onChange={(event) => onChange(items.map((current) => current.id === item.id ? { ...current, title: event.target.value } : current))}
+          />
+          <button type="button" aria-label={`Move ${item.title} up`} disabled={index === 0} onClick={() => {
+            const next = [...items];
+            [next[index - 1], next[index]] = [next[index], next[index - 1]];
+            onChange(next);
+          }}>↑</button>
+          <button type="button" aria-label={`Move ${item.title} down`} disabled={index === items.length - 1} onClick={() => {
+            const next = [...items];
+            [next[index], next[index + 1]] = [next[index + 1], next[index]];
+            onChange(next);
+          }}>↓</button>
+          <button type="button" aria-label={`Delete ${item.title}`} onClick={() => onChange(items.filter((current) => current.id !== item.id))}>×</button>
+        </div>
+      ))}
+      <div className="checklist-editor-row">
+        <input aria-label="New checklist item" placeholder="Add checklist item" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addItem(); } }} />
+        <button type="button" onClick={addItem}>Add</button>
+      </div>
+      {items.length > 0 && <small>{items.filter((item) => item.completed).length} of {items.length} complete</small>}
+    </section>
+  );
 }
 
 const textFields = (type: string) =>
@@ -87,7 +164,6 @@ export function CreateComposer({
   color,
   editing,
   onTypeChange,
-  onColorChange,
   onClose,
   onCreated,
 }: Props) {
@@ -95,11 +171,18 @@ export function CreateComposer({
   const composerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState<number>();
   const [closing, setClosing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [reminders, setReminders] = useState<ReminderRecord[]>([]);
+  const [reminderOffsets, setReminderOffsets] = useState<number[]>([]);
+  const [reminderChoice, setReminderChoice] = useState(-15);
+  const savingRef = useRef(false);
+  const savedRecordId = useRef('');
   const set = (key: string, value: string | boolean) =>
     setForm((current) => ({ ...current, [key]: value }));
 
   useEffect(() => {
     if (!open) return;
+    savedRecordId.current = '';
     setClosing(false);
     const fields = (editing?.fields ?? {}) as Form;
     const entryType = editing?.type ?? type;
@@ -109,8 +192,8 @@ export function CreateComposer({
     setForm({
       title: editing?.title ?? '',
       description: editing?.description ?? '',
+      checklist: JSON.stringify(fields.checklist ?? []),
       ...fields,
-      reminder_minutes: fields.reminder_minutes ?? '',
       repeat: fields.repeat ?? repeatFromRule(fields.rrule),
       recurrence_scope: editing?.masterId ? 'occurrence' : 'series',
       ...(entryType === 'task'
@@ -120,6 +203,20 @@ export function CreateComposer({
             all_day: fields.all_day ?? true,
           }),
     });
+    setReminders([]);
+    setReminderOffsets([]);
+    const reminderTarget = editing?.masterId ?? editing?.id;
+    if (reminderTarget && (entryType === 'task' || entryType === 'event') && navigator.onLine) {
+      void apiFetch(`/api/reminders?targetKind=${entryType}&targetId=${encodeURIComponent(reminderTarget)}`, {
+        headers: { Authorization: `Bearer ${pb.authStore.token}` },
+      }).then(async (response) => {
+        if (!response.ok) throw new Error();
+        return (await response.json()) as ReminderRecord[];
+      }).then((records) => {
+        setReminders(records);
+        setReminderOffsets(records.map((item) => item.offsetMinutes));
+      }).catch(() => set('error', 'Could not load reminders for this entry.'));
+    }
   }, [editing, open]);
   useLayoutEffect(() => {
     if (!open || !composerRef.current) return;
@@ -146,8 +243,27 @@ export function CreateComposer({
       onClose();
     }
   };
+  const saveContainer = async (values: Record<string, unknown>) => {
+    const owner = pb.authStore.record?.id;
+    if (!owner) throw new Error('Sign in before creating a list or calendar.');
+    const collection = type === 'calendar' ? 'calendars' : 'lists';
+    await offlineCollection(collection).create({
+      owner,
+      name: String(values.name).trim(),
+      description: String(values.description ?? ''),
+      color: String(values.color),
+    });
+    onCreated();
+    close();
+  };
+
   const save = async () => {
+    if (savingRef.current) return;
     if (!String(form.title ?? '').trim()) return;
+    if (!navigator.onLine && reminderOffsets.length > 0) {
+      set('error', 'Reminders need a connection. Clear the reminder to save this entry offline.');
+      return;
+    }
     const owner = pb.authStore.record?.id;
     const now = new Date().toISOString();
     const collection =
@@ -158,11 +274,13 @@ export function CreateComposer({
           : type === 'calendar'
             ? 'calendars'
             : 'lists';
-    const { reminder_minutes: reminderMinutes, ...entryForm } = form;
+    const entryForm = { ...form };
+    delete entryForm.reminder_minutes;
     delete entryForm.error;
     delete entryForm.recurrence_scope;
     delete entryForm.recurrence_id;
     delete entryForm.repeat;
+    if (type === 'task') entryForm.checklist = parseChecklist(form.checklist);
     const allDay = type === 'event' && Boolean(form.all_day);
     const startInput = String(form.start_local ?? form.start_date ?? '').trim();
     const endInput = String(form.end_local ?? form.end_date ?? '').trim();
@@ -170,7 +288,10 @@ export function CreateComposer({
     const start = localToRecord(startInput, allDay);
     const end = localToRecord(endInput, allDay);
     const due = localToRecord(dueInput, false);
-    if ((type === 'event' && startInput && !start.index) || (type === 'task' && dueInput && !due.index)) {
+    if (
+      (type === 'event' && startInput && !start.index) ||
+      (type === 'task' && dueInput && !due.index)
+    ) {
       set('error', 'Enter a valid date and time.');
       return;
     }
@@ -180,6 +301,10 @@ export function CreateComposer({
     }
     if (type === 'event' && start.index && end.index && end.index <= start.index) {
       set('error', 'End must be after start.');
+      return;
+    }
+    if (reminderOffsets.length > 0 && ((type === 'task' && !due.index) || (type === 'event' && !start.index))) {
+      set('error', 'Set a due or start date before adding reminders.');
       return;
     }
     const values =
@@ -200,7 +325,7 @@ export function CreateComposer({
             dtstamp: now,
             ...(type === 'task'
               ? {
-                  due_date: due.index || now,
+                  due_date: due.index || '',
                   due_local: due.local,
                   time_mode: due.mode,
                   timezone:
@@ -230,48 +355,51 @@ export function CreateComposer({
       ])
         delete saveValues[field];
     }
+    savingRef.current = true;
+    setSaving(true);
     try {
       if (editing?.masterId && type === 'event' && form.recurrence_scope === 'occurrence') {
         const recurrenceId = String(
           form.recurrence_id ?? editing.fields?.recurrence_id ?? editing.id.split(':')[1] ?? '',
         );
-        const response = await apiFetch(`/api/calendar/occurrences/${editing.masterId}/override`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${pb.authStore.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ recurrenceId, values: saveValues }),
-        });
-        if (!response.ok) throw new Error('Could not save this occurrence.');
+        await offlineRecurrence(editing.masterId, 'override', recurrenceId, saveValues);
         onCreated();
         close();
         return;
       }
-      const record = editing
-        ? await pb.collection(collection).update(editing.masterId ?? editing.id, saveValues)
-        : await pb.collection(collection).create(saveValues);
+      const targetId = editing?.masterId ?? editing?.id ?? savedRecordId.current;
+      const record = targetId
+        ? await offlineCollection(collection).update(targetId, saveValues)
+        : await offlineCollection(collection).create(saveValues);
+      savedRecordId.current = record.id;
       if (type === 'list' || type === 'calendar') {
         onCreated();
         close();
         return;
       }
-      if (String(reminderMinutes) && Number.isFinite(Number(reminderMinutes))) {
+      if (navigator.onLine && (reminders.length > 0 || reminderOffsets.length > 0)) {
+        await waitForOfflineRecord(collection, record.id);
         const targetAt = type === 'task' ? record.due_date : record.start_date;
-        await apiFetch('/api/reminders', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${pb.authStore.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            targetKind: type,
-            targetId: record.id,
-            at: new Date(String(targetAt)).toISOString(),
-            offsetMinutes: Number(reminderMinutes),
-            channel: 'in-app',
-          }),
-        });
+        const targetInstant = new Date(String(targetAt)).toISOString();
+        for (const reminder of reminders) {
+          const stillWanted = reminderOffsets.includes(reminder.offsetMinutes) && new Date(reminder.at).getTime() === new Date(targetInstant).getTime();
+          if (!stillWanted) {
+            const response = await apiFetch(`/api/reminders/${encodeURIComponent(reminder.id)}`, {
+              method: 'DELETE', headers: { Authorization: `Bearer ${pb.authStore.token}` },
+            });
+            if (!response.ok) throw new Error('Could not remove an old reminder.');
+          }
+        }
+        const remaining = reminders.filter((reminder) => reminderOffsets.includes(reminder.offsetMinutes) && new Date(reminder.at).getTime() === new Date(targetInstant).getTime());
+        for (const offsetMinutes of reminderOffsets) {
+          if (remaining.some((item) => item.offsetMinutes === offsetMinutes)) continue;
+          const response = await apiFetch('/api/reminders', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${pb.authStore.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetKind: type, targetId: record.id, at: targetInstant, offsetMinutes, channel: 'in-app' }),
+          });
+          if (!response.ok && response.status !== 409) throw new Error('Could not save the reminders. Try again when connected.');
+        }
       }
       const containerId = String(type === 'task' ? record.list : record.calendar);
       const container = lists.find((item) => item.id === containerId);
@@ -279,7 +407,7 @@ export function CreateComposer({
         id: record.id,
         title: String(record.title),
         description: String(record.description ?? ''),
-        date: String(record.due_date ?? record.start_date ?? now).slice(0, 10),
+        date: String(record.due_date || record.start_date || '').slice(0, 10),
         time: record.all_day ? undefined : String(record.start_date ?? '').slice(11, 16),
         containerId,
         list: container?.name ?? (type === 'task' ? 'Tasks' : 'Calendar'),
@@ -293,13 +421,20 @@ export function CreateComposer({
       else entries.push(entry);
       onCreated();
       close();
-    } catch {
-      set('error', 'Could not save this entry.');
+    } catch (reason) {
+      set(
+        'error',
+        savedRecordId.current
+          ? `Entry saved on this device. ${reason instanceof Error ? reason.message : 'Could not finish saving.'}`
+          : 'Could not save this entry.',
+      );
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
   const renderExtraFields = (entryType: string) => (
     <div className="ical-fields">
-
       {editing?.masterId && entryType === 'event' && (
         <label>
           Edit scope
@@ -393,19 +528,26 @@ export function CreateComposer({
           <option value="custom">Imported custom rule</option>
         </select>
       </label>
-      <label>
-        Reminder
-        <select
-          value={String(form.reminder_minutes ?? '')}
-          onChange={(e) => set('reminder_minutes', e.target.value)}
-        >
-          <option value="">No reminder</option>
-          <option value="-15">15 minutes before</option>
-          <option value="-30">30 minutes before</option>
-          <option value="-60">1 hour before</option>
-          <option value="0">At start</option>
-        </select>
-      </label>
+      <section className="reminder-editor" aria-label="Reminders">
+        <strong>Reminders</strong>
+        {reminderOffsets.map((offset) => (
+          <div key={offset} className="reminder-editor-row">
+            <span>{reminderLabel(offset)}</span>
+            <button type="button" aria-label={`Remove ${reminderLabel(offset)} reminder`} onClick={() => setReminderOffsets((current) => current.filter((item) => item !== offset))}>Remove</button>
+          </div>
+        ))}
+        <div className="reminder-editor-row">
+          <select aria-label="Reminder offset" value={reminderChoice} onChange={(event) => setReminderChoice(Number(event.target.value))}>
+            <option value={-10080}>1 week before</option>
+            <option value={-1440}>1 day before</option>
+            <option value={-60}>1 hour before</option>
+            <option value={-30}>30 minutes before</option>
+            <option value={-15}>15 minutes before</option>
+            <option value={0}>At start</option>
+          </select>
+          <button type="button" disabled={reminderOffsets.includes(reminderChoice)} onClick={() => setReminderOffsets((current) => [...current, reminderChoice])}>Add reminder</button>
+        </div>
+      </section>
       {textFields(entryType).map(([key, label]) => (
         <label key={key}>
           {label}
@@ -473,6 +615,12 @@ export function CreateComposer({
                 setDescription={(value) => set('description', value)}
                 placeholder={entryType === 'task' ? 'What needs doing?' : 'What is happening?'}
               />
+              {entryType === 'task' && (
+                <ChecklistEditor
+                  items={parseChecklist(form.checklist)}
+                  onChange={(items) => set('checklist', JSON.stringify(items))}
+                />
+              )}
               <details className="advanced-options">
                 <summary>Advanced options</summary>
                 {renderExtraFields(entryType)}
@@ -480,34 +628,44 @@ export function CreateComposer({
             </TabsContent>
           ))}
           <TabsContent value="list">
-            <CreateFields
-              title={String(form.title ?? '')}
-              setTitle={(value) => set('title', value)}
-              description={String(form.description ?? '')}
-              setDescription={(value) => set('description', value)}
-              placeholder="Name this list"
-              color={color}
-              setColor={onColorChange}
-              showColor
+            <ResourceForm
+              key={`list-${open}`}
+              resource={listResource}
+              initialValues={{
+                name: String(form.title ?? ''),
+                description: String(form.description ?? ''),
+                color,
+              }}
+              fieldRenderers={[taskboardColorField]}
+              submitLabel="Create list"
+              onSubmit={saveContainer}
             />
           </TabsContent>
           <TabsContent value="calendar">
-            <CreateFields
-              title={String(form.title ?? '')}
-              setTitle={(value) => set('title', value)}
-              description={String(form.description ?? '')}
-              setDescription={(value) => set('description', value)}
-              placeholder="Name this calendar"
-              color={color}
-              setColor={onColorChange}
-              showColor
+            <ResourceForm
+              key={`calendar-${open}`}
+              resource={calendarResource}
+              initialValues={{
+                name: String(form.title ?? ''),
+                description: String(form.description ?? ''),
+                color,
+              }}
+              fieldRenderers={[taskboardColorField]}
+              submitLabel="Create calendar"
+              onSubmit={saveContainer}
             />
           </TabsContent>
         </Tabs>
-        {form.error && <p className="form-error">{String(form.error)}</p>}
-        <button className="button button-primary composer-save" onClick={() => void save()}>
-          <Plus size={17} /> {editing ? 'Save changes' : `Create ${type}`}
-        </button>
+        {Boolean(form.error) && <p className="form-error">{String(form.error)}</p>}
+        {type !== 'list' && type !== 'calendar' && (
+          <button
+            className="button button-primary composer-save"
+            disabled={saving}
+            onClick={() => void save()}
+          >
+            <Plus size={17} /> {editing ? 'Save changes' : `Create ${type}`}
+          </button>
+        )}
       </div>
     </div>
   );

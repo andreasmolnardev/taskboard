@@ -1,24 +1,31 @@
+import {
+  offlineCollection,
+  offlineJson,
+  retryOfflineSync,
+  startOffline,
+  stopOffline,
+  subscribeOfflineData,
+} from './offline';
+import { OfflineStatus } from './components/app/offline-status';
 import { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import type { RecordModel } from 'pocketbase';
-import { useNavigate, useRouterState } from '@tanstack/react-router';
+import type { OfflineRecord as RecordModel } from './offline';
+import { useNavigate, useRouterState } from './router';
 import { useTheme } from 'next-themes';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Sidebar, type SidebarTab } from './components/sidebar';
-import { apiFetch } from './api/client';
-import { taskboardQueryKeys } from './api/query-keys';
+import type { SidebarTab } from './components/sidebar';
+import { taskboardAuth, taskboardShell } from './application';
+import { FileRouteOutlet, resolveFileRoute, resolveView, runAction, useAuthentication } from './lib/slopstack';
+import { TaskboardViewsProvider } from './views/taskboard-views';
+import { createTaskAction, taskboardApplication } from './application';
 import { pb } from './api/pocketbase';
 import { accentColors, entries, fontSizes, getActiveContainers, lists, type Entry } from './data';
-import { CalendarTab } from './components/tabs/calendar-tab';
-import { ListsTab } from './components/tabs/lists-tab';
 import { SearchTab } from './components/tabs/search-tab';
-import { SettingsTab } from './components/tabs/settings-tab';
-import { UpcomingTab } from './components/tabs/upcoming-tab';
-import { PeopleTab } from './components/tabs/people-tab';
 import { AuthScreen } from './components/app/auth-screen';
+import { AdminSsoPage } from './components/app/admin-sso-page';
 import { CreateComposer } from './components/app/create-composer';
 import { NotificationsPopover } from './components/app/notifications-popover';
 import { applyCustomTheme, readCustomTheme } from './theme';
+import { fileRouteModules, fileRoutes } from './route-definitions';
 
 function compactLocalParts(value: unknown) {
   const match = String(value ?? '').match(/^(\\d{4})(\\d{2})(\\d{2})(?:T(\\d{2})(\\d{2}))?/);
@@ -61,41 +68,32 @@ function recordHasRecurrence(record: RecordModel) {
 }
 
 export function App() {
-  const [authenticated, setAuthenticated] = useState(pb.authStore.isValid);
-  const [authUserId, setAuthUserId] = useState(pb.authStore.record?.id ?? '');
+  const auth = useAuthentication(taskboardAuth);
+  const authenticated = Boolean(auth.session);
+  const authUserId = auth.session?.user.id ?? '';
+  const ShellComponent = taskboardShell.component;
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const calendarSearch = useRouterState({ select: (state) => state.location.search });
-  const requestedCalendarMonth =
-    typeof calendarSearch.month === 'string' ? calendarSearch.month : undefined;
-  const activeTab: SidebarTab =
-    pathname === '/calendar'
-      ? 'calendar'
-      : pathname === '/lists'
-        ? 'lists'
-        : pathname === '/people'
-          ? 'people'
-          : pathname === '/search'
-            ? 'search'
-            : pathname === '/settings'
-              ? 'settings'
-              : 'upcoming';
+  const activeView = resolveView(taskboardApplication.views ?? [], pathname)?.view;
+  const activeTab = (activeView?.id ?? 'upcoming') as SidebarTab;
   const [composerOpen, setComposerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationsClosing, setNotificationsClosing] = useState(false);
-  const [notificationCount, setNotificationCount] = useState(0);
-  const queryClient = useQueryClient();
   const notificationsRef = useRef<HTMLDivElement>(null);
   const [createType, setCreateType] = useState('task');
-  const [createColor, setCreateColor] = useState(accentColors[0].value);
+  const createColor = accentColors[0].value;
   const [listOnlyComposer, setListOnlyComposer] = useState(false);
   const [taskEventOnlyComposer, setTaskEventOnlyComposer] = useState(false);
   const [editingEntry, setEditingEntry] = useState<import('./data').Entry | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [dataError, setDataError] = useState('');
+  const [offlineReadyUser, setOfflineReadyUser] = useState('');
   const [, setDataVersion] = useState(0);
+  const loadVersion = useRef(0);
+  const offlineReady = useRef<Promise<void>>(Promise.resolve());
   const knownUserId = useRef(pb.authStore.record?.id ?? '');
-  const { resolvedTheme, setTheme } = useTheme();
+  const { setTheme } = useTheme();
   useEffect(() => {
     const applyStoredTheme = () => {
       const customTheme = readCustomTheme();
@@ -109,10 +107,6 @@ export function App() {
   const closeNotifications = () => {
     setNotificationsClosing(false);
     setNotificationsOpen(false);
-  };
-  const refreshData = () => {
-    if (!authUserId) return;
-    void queryClient.invalidateQueries({ queryKey: taskboardQueryKeys.homeData(authUserId) });
   };
 
   useEffect(() => {
@@ -144,29 +138,72 @@ export function App() {
     return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
   }, [notificationsOpen]);
   useEffect(() => {
-    const isAuthRoute = pathname.startsWith('/auth/');
+    const isAdminSsoRoute = pathname === '/admin/sso';
+    const isAuthRoute = pathname.startsWith('/auth/') || isAdminSsoRoute;
     if (!authenticated && !isAuthRoute) void navigate({ to: '/auth/login', replace: true });
-    if (authenticated && isAuthRoute) void navigate({ to: '/', replace: true });
+    if (authenticated && isAuthRoute && !isAdminSsoRoute) void navigate({ to: '/', replace: true });
   }, [authenticated, navigate, pathname]);
   useEffect(() => {
-    return pb.authStore.onChange((_token, record) => {
-      const nextUserId = record?.id ?? '';
-      const userChanged = nextUserId !== knownUserId.current;
-      knownUserId.current = nextUserId;
-      if (userChanged) {
-        entries.splice(0, entries.length);
-        lists.splice(0, lists.length);
-        setDataVersion((version) => version + 1);
-        setNotificationCount(0);
-        setDataError('');
-        setComposerOpen(false);
-        setEditingEntry(null);
-        setListOnlyComposer(false);
-        setTaskEventOnlyComposer(false);
-        setAuthUserId(nextUserId);
-      }
-      setAuthenticated(Boolean(record));
-    });
+    void taskboardAuth.initialize();
+    return () => taskboardAuth.dispose();
+  }, []);
+  useEffect(() => {
+    if (!authenticated || !authUserId) {
+      setOfflineReadyUser('');
+      void stopOffline(!pb.authStore.record?.id).catch(() =>
+        setDataError(
+          'Could not clear saved account data. Close other Taskboard tabs and try again.',
+        ),
+      );
+      return;
+    }
+    const unsubscribe = subscribeOfflineData(() => setRefreshKey((key) => key + 1));
+    offlineReady.current = startOffline(authUserId);
+    void offlineReady.current
+      .then(() => {
+        if (pb.authStore.record?.id === authUserId) setOfflineReadyUser(authUserId);
+      })
+      .catch(() => {
+        if (pb.authStore.record?.id === authUserId) setDataError('Could not open saved data.');
+      });
+    return () => {
+      unsubscribe();
+    };
+  }, [authenticated, authUserId]);
+  useEffect(() => {
+    const nextUserId = authUserId;
+    if (nextUserId === knownUserId.current) return;
+    knownUserId.current = nextUserId;
+    loadVersion.current += 1;
+    window.dispatchEvent(new CustomEvent('taskboard-notification-count', { detail: 0 }));
+    entries.splice(0, entries.length);
+    lists.splice(0, lists.length);
+    setDataVersion((version) => version + 1);
+    setDataError('');
+    setComposerOpen(false);
+    setEditingEntry(null);
+    setListOnlyComposer(false);
+    setTaskEventOnlyComposer(false);
+  }, [authUserId]);
+  useEffect(() => {
+    const openCreate = (event: Event) => {
+      const type = (event as CustomEvent<{ type?: string }>).detail?.type ?? 'task';
+      setEditingEntry(null);
+      setCreateType(type);
+      setListOnlyComposer(false);
+      setTaskEventOnlyComposer(false);
+      setComposerOpen(true);
+    };
+    window.addEventListener('taskboard-create', openCreate);
+    const openNotifications = () => {
+      setNotificationsClosing(false);
+      setNotificationsOpen(true);
+    };
+    window.addEventListener('taskboard-open-notifications', openNotifications);
+    return () => {
+      window.removeEventListener('taskboard-create', openCreate);
+      window.removeEventListener('taskboard-open-notifications', openNotifications);
+    };
   }, []);
   useEffect(() => {
     if (!authenticated || !authUserId) return;
@@ -185,18 +222,20 @@ export function App() {
       selectedSize?.size ?? fontSizes[1].size,
     );
   }, [authenticated, authUserId]);
-  const homeDataQuery = useQuery({
-    queryKey: taskboardQueryKeys.homeData(authUserId),
-    enabled: authenticated && Boolean(authUserId),
-    staleTime: 30_000,
-    queryFn: async () => {
-      const userId = authUserId;
-      const filter = `owner = "${userId}"`;
+  useEffect(() => {
+    if (!authenticated || !authUserId) return;
+    const userId = authUserId;
+    const version = ++loadVersion.current;
+    const isCurrent = () => version === loadVersion.current && pb.authStore.record?.id === userId;
+    setDataError('');
+    const loadEntries = async () => {
+      await offlineReady.current;
+      if (!isCurrent()) return;
       const [tasks, events, taskLists, calendars] = await Promise.all([
-        pb.collection('todos').getFullList({ filter, sort: 'due_date' }),
-        pb.collection('events').getFullList({ filter, sort: 'start_date' }),
-        pb.collection('lists').getFullList({ filter, sort: 'name' }),
-        pb.collection('calendars').getFullList({ filter, sort: 'name' }),
+        offlineCollection('todos').getFullList({ sort: 'due_date' }),
+        offlineCollection('events').getFullList({ sort: 'start_date' }),
+        offlineCollection('lists').getFullList({ sort: 'name' }),
+        offlineCollection('calendars').getFullList({ sort: 'name' }),
       ]);
       const containers = [
         ...taskLists.map((record) => ({
@@ -206,6 +245,10 @@ export function App() {
           description: String(record.description ?? ''),
           kind: 'list' as const,
           archived: Boolean(record.archived),
+          isProject: Boolean(record.is_project),
+          projectStatus: String(record.project_status || 'active') as 'active' | 'paused' | 'completed',
+          homeUrl: String(record.home_url ?? ''),
+          targetDate: String(record.target_date ?? '').slice(0, 10),
         })),
         ...calendars.map((record) => ({
           id: record.id,
@@ -214,6 +257,10 @@ export function App() {
           description: String(record.description ?? ''),
           kind: 'calendar' as const,
           archived: Boolean(record.archived),
+          isProject: false,
+          projectStatus: 'active' as const,
+          homeUrl: '',
+          targetDate: '',
         })),
       ];
       const containerById = new Map(containers.map((container) => [container.id, container]));
@@ -227,7 +274,7 @@ export function App() {
           id: record.id,
           title: String(record.title ?? ''),
           description: String(record.description ?? ''),
-          date: temporal.date || new Date().toISOString().slice(0, 10),
+          date: temporal.date,
           time: temporal.time,
           containerId: container.id,
           list: container.name,
@@ -237,10 +284,10 @@ export function App() {
           fields: record as unknown as Record<string, unknown>,
         };
       };
-      const rangeStart = new Date();
-      rangeStart.setFullYear(rangeStart.getFullYear() - 1);
-      const rangeEnd = new Date();
-      rangeEnd.setFullYear(rangeEnd.getFullYear() + 2);
+      const today = new Date();
+      // Stable bounds let offline reloads reuse the saved occurrence range.
+      const rangeStart = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+      const rangeEnd = new Date(today.getFullYear() + 2, today.getMonth(), 1);
       const occurrenceParams = new URLSearchParams({
         start: rangeStart.toISOString(),
         end: rangeEnd.toISOString(),
@@ -260,18 +307,24 @@ export function App() {
         allDay: boolean;
         recurring: boolean;
         recurrenceId?: string;
+        title?: string;
+        description?: string;
+        calendar?: string;
+        color?: string;
       }> = [];
       let occurrenceError = false;
+      let occurrencesCached = false;
       try {
-        const occurrenceResponse = await apiFetch(`/api/calendar/occurrences?${occurrenceParams}`, {
-          headers: { Authorization: `Bearer ${pb.authStore.token}` },
-        });
-        if (!occurrenceResponse.ok) throw new Error('Could not load recurring events.');
-        occurrences = (await occurrenceResponse.json()) as typeof occurrences;
+        const result = await offlineJson<typeof occurrences>(
+          `/api/calendar/occurrences?${occurrenceParams}`,
+        );
+        occurrences = result.data;
+        occurrencesCached = result.cached;
       } catch (error) {
         occurrenceError = true;
         console.warn('Could not load recurring events.', error);
       }
+      if (!isCurrent()) return;
       const eventById = new Map(events.map((record) => [record.id, record]));
       const recurringEventIds = new Set(
         events.filter(recordHasRecurrence).map((record) => record.id),
@@ -288,6 +341,11 @@ export function App() {
           if (!entry) return null;
           return {
             ...entry,
+            title: occurrence.title ?? entry.title,
+            description: occurrence.description ?? entry.description,
+            containerId: occurrence.calendar ?? entry.containerId,
+            list: containerById.get(occurrence.calendar ?? '')?.name ?? entry.list,
+            color: occurrence.color ?? entry.color,
             id: occurrence.id,
             masterId: occurrence.masterId,
             date: occurrence.start.slice(0, 10),
@@ -335,145 +393,125 @@ export function App() {
         ...eventEntries,
         ...recurringFallbacks,
       ];
+      if (!isCurrent()) return;
       const activeContainerIds = new Set(
         getActiveContainers(containers).map((container) => container.id),
       );
-      return {
-        userId,
-        entries: loadedEntries.filter(
+      entries.splice(
+        0,
+        entries.length,
+        ...loadedEntries.filter(
           (entry) =>
             activeContainerIds.has(entry.containerId) &&
             !hiddenContainerIds.includes(entry.containerId),
         ),
-        lists: containers.map((container) => ({
+      );
+      lists.splice(
+        0,
+        lists.length,
+        ...containers.map((container) => ({
           id: container.id,
           name: String(container.name),
           color: String(container.color || '#3b6ea8'),
           description: String(container.description || ''),
           kind: container.kind,
           archived: container.archived,
+          isProject: container.isProject,
+          projectStatus: container.projectStatus,
+          homeUrl: container.homeUrl,
+          targetDate: container.targetDate,
           count: loadedEntries.filter((entry) => entry.containerId === container.id).length,
         })),
-        error: occurrenceError
+      );
+      setDataError(
+        occurrenceError
           ? 'Recurring events are unavailable. Showing their base events instead.'
-          : '',
-      };
-    },
-  });
-  useEffect(() => {
-    const data = homeDataQuery.data;
-    if (!data || data.userId !== authUserId || pb.authStore.record?.id !== authUserId) return;
-    entries.splice(0, entries.length, ...data.entries);
-    lists.splice(0, lists.length, ...data.lists);
-    setDataError(data.error);
-    setDataVersion((current) => current + 1);
-  }, [authUserId, homeDataQuery.data]);
-  useEffect(() => {
-    if (homeDataQuery.isError) setDataError('Could not load your entries.');
-  }, [homeDataQuery.isError]);
+          : occurrencesCached
+            ? 'Showing saved recurring events. Recent series changes appear after sync.'
+            : '',
+      );
+      setDataVersion((current) => current + 1);
+    };
+    void loadEntries().catch(() => {
+      if (isCurrent()) setDataError('Could not load your entries.');
+    });
+  }, [authenticated, authUserId, refreshKey]);
 
   const openCreateComposer = () => {
-    setEditingEntry(null);
-    setCreateType('task');
-    setListOnlyComposer(false);
-    setTaskEventOnlyComposer(false);
-    setComposerOpen(true);
+    void runAction(createTaskAction, undefined, {
+      navigate: (to) => {
+        void navigate({ to });
+      },
+      authorize: () => authenticated,
+      confirm: () => true,
+      notify: () => undefined,
+    });
   };
 
   if (!authenticated)
+    if (pathname === '/admin/sso') return <AdminSsoPage />;
+  if (!authenticated)
     return <AuthScreen mode={pathname === '/auth/register' ? 'register' : 'login'} />;
-  const content =
-    activeTab === 'calendar' ? (
-      <CalendarTab
-        key={requestedCalendarMonth ?? 'today'}
-        initialMonth={requestedCalendarMonth}
-        onEdit={(entry) => {
-          setEditingEntry(entry);
-          setCreateType(entry.type);
-          setListOnlyComposer(false);
-          setTaskEventOnlyComposer(true);
-          setComposerOpen(true);
-        }}
-        onDayClick={() => {
-          setEditingEntry(null);
-          setCreateType('task');
-          setListOnlyComposer(false);
-          setTaskEventOnlyComposer(true);
-          setComposerOpen(true);
-        }}
-      />
-    ) : activeTab === 'lists' ? (
-      <ListsTab
-        onChanged={refreshData}
-        onEdit={(entry) => {
-          setEditingEntry(entry);
-          setCreateType(entry.type);
-          setListOnlyComposer(false);
-          setTaskEventOnlyComposer(true);
-          setComposerOpen(true);
-        }}
-        onAdd={() => {
-          setEditingEntry(null);
-          setCreateType('list');
-          setListOnlyComposer(true);
-          setTaskEventOnlyComposer(false);
-          setComposerOpen(true);
-        }}
-      />
-    ) : activeTab === 'people' ? (
-      <PeopleTab />
-    ) : activeTab === 'settings' ? (
-      <SettingsTab onChanged={refreshData} />
-    ) : (
-      <UpcomingTab
-        onChanged={refreshData}
-        onEdit={(entry) => {
-          setEditingEntry(entry);
-          setCreateType(entry.type);
-          setListOnlyComposer(false);
-          setTaskEventOnlyComposer(true);
-          setComposerOpen(true);
-        }}
-        onOpenMonth={(year, month) => {
-          void navigate({
-            to: '/calendar',
-            search: { month: `${year}-${String(month + 1).padStart(2, '0')}` },
-          });
-        }}
-      />
+  if (pathname === '/admin/sso') return <AdminSsoPage />;
+  const editEntry = (entry: import('./data').Entry) => {
+    setEditingEntry(entry);
+    setCreateType(entry.type);
+    setListOnlyComposer(false);
+    setTaskEventOnlyComposer(true);
+    setComposerOpen(true);
+  };
+  const bindings = {
+    onChanged: () => {
+      retryOfflineSync();
+      setRefreshKey((key) => key + 1);
+    },
+    onEdit: editEntry,
+    onAddList: () => {
+      setEditingEntry(null);
+      setCreateType('list');
+      setListOnlyComposer(true);
+      setTaskEventOnlyComposer(false);
+      setComposerOpen(true);
+    },
+    onOpenMonth: (year: number, month: number) => {
+      void navigate({
+        to: '/calendar',
+        search: { month: `${year}-${String(month + 1).padStart(2, '0')}` },
+      });
+    },
+    onOpenDay: () => {
+      setEditingEntry(null);
+      setCreateType('task');
+      setListOnlyComposer(false);
+      setTaskEventOnlyComposer(true);
+      setComposerOpen(true);
+    },
+  };
+  const fileRoute = resolveFileRoute(fileRoutes, fileRouteModules, {
+    pathname,
+    search: new URLSearchParams(window.location.search),
+    navigate: (to, options) => void navigate({ to, replace: options?.replace }),
+  });
+  const content = activeView ? (
+    <TaskboardViewsProvider value={bindings}>
+      <FileRouteOutlet resolution={fileRoute} />
+    </TaskboardViewsProvider>
+  ) : <FileRouteOutlet resolution={fileRoute} />;
+
+  if (offlineReadyUser !== authUserId) {
+    return (
+      <ShellComponent>
+        <main className="main-content">
+          <p role="status">{dataError || 'Loading saved data…'}</p>
+        </main>
+      </ShellComponent>
     );
+  }
 
   return (
-    <div className={`app-shell ${resolvedTheme === 'dark' ? 'dark' : ''}`}>
-      <Sidebar
-        activeTab={activeTab}
-        onChange={(tab) => {
-          if (tab === 'notifications') {
-            setNotificationsClosing(false);
-            setNotificationsOpen(true);
-          } else if (tab === 'upcoming') {
-            closeNotifications();
-            void navigate({ to: '/' });
-          } else if (tab === 'calendar') {
-            closeNotifications();
-            void navigate({ to: '/calendar', search: { month: undefined } });
-          } else if (tab === 'lists') {
-            closeNotifications();
-            void navigate({ to: '/lists' });
-          } else if (tab === 'people') {
-            closeNotifications();
-            void navigate({ to: '/people' });
-          } else if (tab === 'search') {
-            closeNotifications();
-            setSearchOpen(true);
-          } else {
-            closeNotifications();
-            void navigate({ to: '/settings' });
-          }
-        }}
-        notificationCount={notificationCount}
-      />
+    <ShellComponent>
       <main className="main-content">
+        <OfflineStatus />
         {dataError && (
           <p className="form-error app-error" role="alert">
             {dataError}
@@ -512,7 +550,11 @@ export function App() {
             void navigate({ to: '/people' });
             setSearchOpen(false);
           } else if (result.type === 'list' || result.type === 'calendar') {
-            void navigate({ to: result.type === 'calendar' ? '/settings' : '/lists' });
+            void navigate(
+              result.type === 'calendar'
+                ? { to: '/calendar', search: { month: undefined } }
+                : { to: '/lists' },
+            );
             setSearchOpen(false);
           }
         }}
@@ -523,7 +565,9 @@ export function App() {
           open={notificationsOpen}
           closing={notificationsClosing}
           onClose={closeNotifications}
-          onCountChange={setNotificationCount}
+          onCountChange={(count) =>
+            window.dispatchEvent(new CustomEvent('taskboard-notification-count', { detail: count }))
+          }
           onAnimationEnd={(event) => {
             if (event.target === event.currentTarget && notificationsClosing) {
               setNotificationsOpen(false);
@@ -540,7 +584,6 @@ export function App() {
         color={createColor}
         editing={editingEntry}
         onTypeChange={setCreateType}
-        onColorChange={setCreateColor}
         onClose={() => {
           setComposerOpen(false);
           setEditingEntry(null);
@@ -551,9 +594,9 @@ export function App() {
           setEditingEntry(null);
           setListOnlyComposer(false);
           setTaskEventOnlyComposer(false);
-          refreshData();
+          setRefreshKey((key) => key + 1);
         }}
       />
-    </div>
+    </ShellComponent>
   );
 }

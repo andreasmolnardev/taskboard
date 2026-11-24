@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Filter } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { entries, formatDate, formatDateKey, getWeekStart, type Entry } from '../../data';
@@ -72,7 +72,7 @@ export function CalendarTab({
   const [filter, setFilter] = useState<'all' | 'task' | 'event'>('all');
   const [today] = useState(() => new Date());
   const requestedMonth = parseMonth(initialMonth);
-  const requestedMonthOffset = requestedMonth ? monthDifference(today, requestedMonth) : 0;
+  const [monthAnchor, setMonthAnchor] = useState(requestedMonth ?? today);
   const [selectedDate, setSelectedDate] = useState(requestedMonth ?? today);
   const [todayVisible, setTodayVisible] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -107,8 +107,7 @@ export function CalendarTab({
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const container = scrollRef.current;
-      const targetOffset = view === 'month' ? requestedMonthOffset : 0;
-      const targetIndex = Math.max(0, Math.min(pageCount - 1, pageRadius + targetOffset));
+      const targetIndex = pageRadius;
       const page = pageRefs.current[targetIndex];
       if (!container || !page) return;
       if (view === 'month') {
@@ -118,9 +117,10 @@ export function CalendarTab({
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [view, pageRadius, requestedMonthOffset]);
+  }, [view, pageRadius, monthAnchor]);
 
   useEffect(() => {
+    if (view === 'month') return;
     const container = scrollRef.current;
     const todayPage = pageRefs.current[pageRadius];
     if (!container || !todayPage) return;
@@ -156,19 +156,40 @@ export function CalendarTab({
     const offset = index - pageRadius;
     const nextDate =
       view === 'month'
-        ? addMonths(today, offset)
+        ? addMonths(monthAnchor, offset)
         : view === 'week'
           ? addDays(todayWeekStart, offset * 7)
           : addDays(today, offset);
     setSelectedDate(nextDate);
   };
 
+  const shiftMonth = (amount: number) => {
+    const target = addMonths(selectedDate, amount);
+    const offset = monthDifference(monthAnchor, target);
+    setSelectedDate(target);
+    if (Math.abs(offset) > pageRadius) {
+      setMonthAnchor(target);
+      return;
+    }
+    requestAnimationFrame(() => {
+      const container = scrollRef.current;
+      const page = pageRefs.current[pageRadius + offset];
+      if (!container || !page) return;
+      container.scrollTop = page.offsetTop - (container.clientHeight - page.offsetHeight) / 2;
+    });
+  };
+
   const jumpToToday = () => {
     setSelectedDate(today);
     setTodayVisible(true);
+    const offset = view === 'month' ? monthDifference(monthAnchor, today) : 0;
+    if (view === 'month' && Math.abs(offset) > pageRadius) {
+      setMonthAnchor(today);
+      return;
+    }
     requestAnimationFrame(() => {
       const container = scrollRef.current;
-      const page = pageRefs.current[pageRadius];
+      const page = pageRefs.current[pageRadius + offset];
       if (!container || !page) return;
       if (view === 'month') {
         container.scrollTop = page.offsetTop - (container.clientHeight - page.offsetHeight) / 2;
@@ -181,10 +202,36 @@ export function CalendarTab({
   return (
     <div className="calendar-page">
       <header className="page-header">
-        <h1>{heading}</h1>
+        <div className="calendar-heading-group">
+          <h1>{heading}</h1>
+          {view === 'month' && (
+            <div className="calendar-month-navigation" aria-label="Change month">
+              <button
+                type="button"
+                className="calendar-month-arrow"
+                aria-label="Previous month"
+                onClick={() => shiftMonth(-1)}
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                type="button"
+                className="calendar-month-arrow"
+                aria-label="Next month"
+                onClick={() => shiftMonth(1)}
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+        </div>
         <Tabs
           value={view}
-          onValueChange={(value) => setView(value as typeof view)}
+          onValueChange={(value) => {
+            const nextView = value as typeof view;
+            if (nextView === 'month') setMonthAnchor(selectedDate);
+            setView(nextView);
+          }}
           className="calendar-view-tabs"
         >
           <TabsList className="create-tabs-list">
@@ -202,14 +249,14 @@ export function CalendarTab({
           </TabsList>
         </Tabs>
         <div className="header-actions">
-          {!todayVisible && (
+          {(view === 'month' || !todayVisible) && (
             <button
               type="button"
               className="button button-quiet calendar-today-button"
               aria-label="Jump to today"
               onClick={jumpToToday}
             >
-              Jump to today
+              {view === 'month' ? 'Today' : 'Jump to today'}
             </button>
           )}
           <div className="filter-wrap">
@@ -330,7 +377,7 @@ export function CalendarTab({
           ref={scrollRef}
         >
           {Array.from({ length: pageCount }, (_, index) => {
-            const month = addMonths(today, index - pageRadius);
+            const month = addMonths(monthAnchor, index - pageRadius);
             return (
               <div
                 className="calendar-month-page calendar-view-month"
@@ -344,6 +391,7 @@ export function CalendarTab({
                   month={month.getMonth()}
                   entriesToShow={visibleEntries}
                   onDayClick={onDayClick}
+                  onEntryEdit={onEdit}
                 />
               </div>
             );

@@ -68,9 +68,9 @@ describe('FullMonthCalendar', () => {
     );
 
     expect(html).toContain('class="full-month-entry is-all-day-event"');
-    expect(html).toContain('style="background-color:#123456"');
+    expect(html).toContain('style="--entry-color:#123456"');
     expect(html).toContain('class="full-month-entry is-event"');
-    expect(html).toContain('class="full-month-entry-dot" style="background-color:#123456"');
+    expect(html).toContain('class="full-month-entry-dot"');
     expect(html).toContain('class="full-month-entry is-task"');
     expect(html).toContain('full-month-entry-time">1:30 PM</span>');
   });

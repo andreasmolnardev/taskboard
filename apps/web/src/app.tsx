@@ -6,7 +6,6 @@ import {
   stopOffline,
   subscribeOfflineData,
 } from './offline';
-import { OfflineStatus } from './components/app/offline-status';
 import { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { OfflineRecord as RecordModel } from './offline';
@@ -511,7 +510,6 @@ export function App() {
   return (
     <ShellComponent>
       <main className="main-content">
-        <OfflineStatus />
         {dataError && (
           <p className="form-error app-error" role="alert">
             {dataError}
@@ -558,7 +556,7 @@ export function App() {
             setSearchOpen(false);
           }
         }}
-        className="search-dialog"
+        className="search-command"
       />
       <div ref={notificationsRef}>
         <NotificationsPopover

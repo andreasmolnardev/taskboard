@@ -39,7 +39,9 @@ export function NavigationLinks({
           onClick={() => onNavigate(id)}
         >
           <Icon className="size-4" />
-          <span className={layout === 'rail' ? 'sr-only' : ''}>{itemLabel}</span>
+          <span className={layout === 'rail' || layout === 'bottom' ? 'sr-only' : ''}>
+            {itemLabel}
+          </span>
         </Button>
       ))}
     </nav>

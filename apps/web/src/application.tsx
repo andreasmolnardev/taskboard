@@ -18,6 +18,7 @@ import { taskResource, eventResource, listResource, calendarResource } from './r
 import { entries, lists } from './data';
 import { NavigationLinks } from './components/patterns/navigation-links';
 import { taskboardViews } from './route-definitions';
+import { OfflineStatus } from './components/app/offline-status';
 
 function TaskboardShell({ children }: { children: ReactNode }) {
   const [notificationCount, setNotificationCount] = useState(0);
@@ -61,9 +62,10 @@ function TaskboardShell({ children }: { children: ReactNode }) {
     <div className="pb-16 md:pb-0" data-taskboard-shell>
       <ApplicationShell
         brand={
-          <span className="flex items-center gap-2">
+          <span className="relative inline-flex items-center justify-center">
             <CheckSquare className="size-5 shrink-0" aria-hidden="true" />
             <span className="sr-only">Taskboard</span>
+            <OfflineStatus />
           </span>
         }
         items={items}
@@ -212,7 +214,28 @@ export const taskboardSearchProvider = {
   },
 };
 
-export const taskboardAuth = createAuthenticationStore(createPocketBaseAuthAdapter(pb));
+const pocketBaseAuth = createPocketBaseAuthAdapter(pb);
+
+export const taskboardAuth = createAuthenticationStore({
+  ...pocketBaseAuth,
+  async getSession() {
+    const session = await pocketBaseAuth.getSession();
+    if (!import.meta.env.DEV) return session;
+    if (session?.user.email === 'guest@taskboard.local') return session;
+
+    const response = await fetch('/api/auth/guest', { method: 'POST' });
+    if (!response.ok) {
+      throw new Error(`Could not sign in to the development account (HTTP ${response.status}).`);
+    }
+
+    const result = (await response.json()) as {
+      token: string;
+      record: Parameters<typeof pb.authStore.save>[1];
+    };
+    pb.authStore.save(result.token, result.record);
+    return pocketBaseAuth.getSession();
+  },
+});
 
 export const taskboardApplication = defineApplication({
   id: 'taskboard',

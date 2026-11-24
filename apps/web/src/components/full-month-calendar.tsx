@@ -1,5 +1,5 @@
-import { Fragment } from 'react';
-import { Square } from 'lucide-react';
+import { useState, type CSSProperties } from 'react';
+import { MoreHorizontal, Square, X } from 'lucide-react';
 import { entries, formatDateKey, getWeekStart, type Entry } from '../data';
 
 function formatEntryTime(entry: Entry) {
@@ -17,11 +17,13 @@ function isAllDayEvent(entry: Entry) {
   return entry.type === 'event' && entry.fields?.all_day === true;
 }
 
-function getISOWeekNumber(date: Date) {
-  const thursday = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  thursday.setUTCDate(thursday.getUTCDate() + 3 - ((thursday.getUTCDay() + 6) % 7));
-  const firstThursday = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4));
-  return 1 + Math.round((thursday.getTime() - firstThursday.getTime()) / 604800000);
+function formatEntryRange(entry: Entry) {
+  const start = formatEntryTime(entry);
+  if (!start || isAllDayEvent(entry)) return isAllDayEvent(entry) ? 'All day' : 'No time set';
+  const endValue = String(entry.fields?.end_date ?? '').match(/T(\d{2}:\d{2})/);
+  if (!endValue) return start;
+  const end = new Date(`${entry.date}T${endValue[1]}:00`);
+  return `${start} – ${new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(end)}`;
 }
 
 export function FullMonthCalendar({
@@ -29,12 +31,15 @@ export function FullMonthCalendar({
   month,
   entriesToShow = entries,
   onDayClick,
+  onEntryEdit,
 }: {
   year: number;
   month: number;
   entriesToShow?: typeof entries;
   onDayClick: () => void;
+  onEntryEdit?: (entry: Entry) => void;
 }) {
+  const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
   const monthStart = new Date(year, month, 1);
   const weekStart = getWeekStart() === 'monday' ? 1 : 0;
   const firstDayOffset = (monthStart.getDay() - weekStart + 7) % 7;
@@ -52,9 +57,14 @@ export function FullMonthCalendar({
     <div className="full-month-calendar">
       <div className="full-month-heading">
         <strong></strong>
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
           .slice(weekStart)
-          .concat(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].slice(0, weekStart))
+          .concat(
+            ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].slice(
+              0,
+              weekStart,
+            ),
+          )
           .map((day) => (
             <strong key={day}>{day}</strong>
           ))}
@@ -65,69 +75,108 @@ export function FullMonthCalendar({
           const dateEntries = entriesToShow.filter((entry) => entry.date === dateKey);
           const isCurrentMonth = date.getMonth() === month;
           const isToday = dateKey === formatDateKey(new Date());
-          const isWeekStart = (date.getDay() - weekStart + 7) % 7 === 0;
           return (
-            <Fragment key={`${dateKey}-${index}`}>
-              {isWeekStart && (
-                <span className="calendar-week-gutter" aria-hidden="true">
-                  {getISOWeekNumber(date)}
-                </span>
-              )}
-              <div
-                className={`full-month-cell ${isCurrentMonth ? '' : 'is-outside'} ${isToday ? 'is-today' : ''}`}
-                role="button"
-                tabIndex={0}
+            <div
+              key={`${dateKey}-${index}`}
+              className={`full-month-cell ${isCurrentMonth ? '' : 'is-outside'} ${isToday ? 'is-today' : ''} ${index % 7 >= 4 ? 'popover-left' : ''} ${index >= 21 ? 'popover-above' : ''}`}
+              style={
+                selectedEntry && dateEntries.some((entry) => entry.id === selectedEntry.id)
+                  ? ({ '--entry-color': selectedEntry.color } as CSSProperties)
+                  : undefined
+              }
+            >
+              <button
+                type="button"
+                className="full-month-date"
                 onClick={onDayClick}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onDayClick();
-                  }
-                }}
+                aria-label={`Create entry on ${date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`}
               >
-                <span className="full-month-date">{date.getDate()}</span>
-                <div className="full-month-entries">
-                  {dateEntries.map((entry) => {
-                    const allDay = isAllDayEvent(entry);
-                    const time = formatEntryTime(entry);
-                    return (
-                      <div
-                        className={`full-month-entry ${allDay ? 'is-all-day-event' : `is-${entry.type}`}`}
-                        key={entry.id}
-                        style={allDay ? { backgroundColor: entry.color } : undefined}
-                        title={entry.title}
-                      >
-                        {allDay ? (
+                {date.getDate()}
+              </button>
+              <div className="full-month-entries">
+                {dateEntries.slice(0, 4).map((entry) => {
+                  const allDay = isAllDayEvent(entry);
+                  const time = formatEntryTime(entry);
+                  return (
+                    <button
+                      type="button"
+                      className={[
+                        'full-month-entry',
+                        allDay ? 'is-all-day-event' : `is-${entry.type}`,
+                        entry.done ? 'is-done' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                      key={entry.id}
+                      style={{ '--entry-color': entry.color } as CSSProperties}
+                      title={entry.title}
+                      onClick={() => setSelectedEntry(entry)}
+                      aria-label={`${entry.title}${time ? `, ${time}` : ''}`}
+                    >
+                      {allDay ? (
+                        <span className="full-month-entry-title">{entry.title}</span>
+                      ) : entry.type === 'task' ? (
+                        <>
+                          <Square className="full-month-entry-icon" size={11} strokeWidth={2.5} aria-hidden="true" />
+                          {time && <span className="full-month-entry-time">{time}</span>}
                           <span className="full-month-entry-title">{entry.title}</span>
-                        ) : entry.type === 'task' ? (
-                          <>
-                            <Square
-                              className="full-month-entry-icon"
-                              style={{ color: entry.color }}
-                              size={11}
-                              strokeWidth={2.5}
-                              aria-hidden="true"
-                            />
-                            {time && <span className="full-month-entry-time">{time}</span>}
-                            <span className="full-month-entry-title">{entry.title}</span>
-                          </>
-                        ) : (
-                          <>
-                            <span
-                              className="full-month-entry-dot"
-                              style={{ backgroundColor: entry.color }}
-                              aria-hidden="true"
-                            />
-                            {time && <span className="full-month-entry-time">{time}</span>}
-                            <span className="full-month-entry-title">{entry.title}</span>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="full-month-entry-dot" aria-hidden="true" />
+                          {time && <span className="full-month-entry-time">{time}</span>}
+                          <span className="full-month-entry-title">{entry.title}</span>
+                        </>
+                      )}
+                    </button>
+                  );
+                })}
+                {dateEntries.length > 4 && (
+                  <span className="full-month-more">+{dateEntries.length - 4} more</span>
+                )}
               </div>
-            </Fragment>
+              {selectedEntry && dateEntries.some((entry) => entry.id === selectedEntry.id) && (
+                <section className="calendar-event-popover" aria-label="Entry details">
+                  <button
+                    type="button"
+                    className="calendar-event-close"
+                    onClick={() => setSelectedEntry(null)}
+                    aria-label="Close entry details"
+                  >
+                    <X size={16} />
+                  </button>
+                  <div className="calendar-event-kind">
+                    <span className="calendar-event-color" />
+                    {selectedEntry.type === 'event' ? selectedEntry.list : 'Task'}
+                    <button
+                      type="button"
+                      className="calendar-event-more"
+                      onClick={() => onEntryEdit?.(selectedEntry)}
+                      aria-label="Edit entry"
+                    >
+                      <MoreHorizontal size={18} />
+                    </button>
+                  </div>
+                  <h3>{selectedEntry.title}</h3>
+                  <p className="calendar-event-when">
+                    {formatEntryRange(selectedEntry)} ·{' '}
+                    {new Date(`${selectedEntry.date}T12:00:00`).toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </p>
+                  {selectedEntry.description && <p>{selectedEntry.description}</p>}
+                  <button
+                    type="button"
+                    className="button button-primary calendar-event-edit"
+                    onClick={() => onEntryEdit?.(selectedEntry)}
+                  >
+                    Open entry
+                  </button>
+                </section>
+              )}
+            </div>
           );
         })}
       </div>

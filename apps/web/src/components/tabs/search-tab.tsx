@@ -140,25 +140,37 @@ export function SearchTab({
         placeholder="Search your entries"
       />
       <CommandList>
-        <CommandEmpty>{loading ? 'Searching…' : error || 'No entries found.'}</CommandEmpty>
-        <CommandGroup heading="Search results">
-          {results.map((entry) => (
-            <CommandItem
-              key={`${entry.type}-${entry.id}`}
-              value={`${entry.title} ${entry.description ?? ''} ${entry.container ?? ''}`}
-              onSelect={() => onSelect?.(entry)}
-            >
-              <span className="command-entry-icon">
-                {entry.type === 'event' ? <CalendarDays size={16} /> : <Check size={16} />}
-              </span>
-              <span className="command-entry-copy">
-                <strong>{entry.title}</strong>
-                {entry.description ? <MarkdownContent value={entry.description} /> : <small>{entry.type}</small>}
-              </span>
-              <span className="command-entry-list">{entry.container}</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
+        <CommandEmpty>
+          {query.trim()
+            ? loading
+              ? 'Searching…'
+              : error || 'No entries found.'
+            : 'Start typing to search your entries.'}
+        </CommandEmpty>
+        {results.length > 0 && (
+          <CommandGroup heading="Search results">
+            {results.map((entry) => (
+              <CommandItem
+                key={`${entry.type}-${entry.id}`}
+                value={`${entry.title} ${entry.description ?? ''} ${entry.container ?? ''}`}
+                onSelect={() => onSelect?.(entry)}
+              >
+                <span className="command-entry-icon">
+                  {entry.type === 'event' ? <CalendarDays size={16} /> : <Check size={16} />}
+                </span>
+                <span className="command-entry-copy">
+                  <strong>{entry.title}</strong>
+                  {entry.description ? (
+                    <MarkdownContent value={entry.description} />
+                  ) : (
+                    <small>{entry.type}</small>
+                  )}
+                </span>
+                <span className="command-entry-list">{entry.container}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
       </CommandList>
     </CommandDialog>
   );

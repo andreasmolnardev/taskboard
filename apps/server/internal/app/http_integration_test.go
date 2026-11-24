@@ -309,6 +309,14 @@ func TestCalDAVHTTPIntegration(t *testing.T) {
 	if status != http.StatusNotFound {
 		t.Fatalf("cross-user CalDAV DELETE = %d, want %d", status, http.StatusNotFound)
 	}
+	status, _, _ = integrationRequest(t, server, http.MethodDelete, resourcePath, "", mergeHeaders(ownerAuth, http.Header{"If-Match": []string{createdETag}}))
+	if status != http.StatusPreconditionFailed {
+		t.Fatalf("stale CalDAV DELETE = %d, want %d", status, http.StatusPreconditionFailed)
+	}
+	status, _, _ = integrationRequest(t, server, http.MethodGet, resourcePath, "", ownerAuth)
+	if status != http.StatusOK {
+		t.Fatalf("stale CalDAV DELETE removed the resource: GET = %d", status)
+	}
 
 	status, _, _ = integrationRequest(t, server, http.MethodDelete, resourcePath, "", mergeHeaders(ownerAuth, http.Header{"If-Match": []string{updatedETag}}))
 	if status != http.StatusNoContent {

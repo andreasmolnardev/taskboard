@@ -52,6 +52,10 @@ export function FullMonthCalendar({
   const monthName = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(
     monthStart,
   );
+  const openEntryEditor = (entry: Entry) => {
+    setSelectedEntry(null);
+    onEntryEdit?.(entry);
+  };
 
   return (
     <div className="full-month-calendar">
@@ -151,7 +155,7 @@ export function FullMonthCalendar({
                     <button
                       type="button"
                       className="calendar-event-more"
-                      onClick={() => onEntryEdit?.(selectedEntry)}
+                      onClick={() => openEntryEditor(selectedEntry)}
                       aria-label="Edit entry"
                     >
                       <MoreHorizontal size={18} />
@@ -170,7 +174,7 @@ export function FullMonthCalendar({
                   <button
                     type="button"
                     className="button button-primary calendar-event-edit"
-                    onClick={() => onEntryEdit?.(selectedEntry)}
+                    onClick={() => openEntryEditor(selectedEntry)}
                   >
                     Open entry
                   </button>
